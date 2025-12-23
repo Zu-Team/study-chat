@@ -1,0 +1,624 @@
+/* ============================================
+   GLOBAL DARK THEME - ALWAYS DARK
+   ============================================ */
+
+/* CSS Variables for Dark Theme */
+:root[data-theme="dark"],
+html[data-theme="dark"],
+html.dark {
+  /* Background Colors */
+  --dark-bg-primary: #0f0f0f;
+  --dark-bg-secondary: #1a1a1a;
+  --dark-bg-tertiary: #252525;
+  --dark-bg-card: #1e1e1e;
+  --dark-bg-input: #2a2a2a;
+  --dark-bg-hover: #333333;
+  
+  /* Text Colors */
+  --dark-text-primary: #e0e0e0;
+  --dark-text-secondary: #b0b0b0;
+  --dark-text-muted: #888888;
+  --dark-text-inverse: #0f0f0f;
+  
+  /* Accent Colors */
+  --dark-accent-primary: #4a9eff;
+  --dark-accent-primary-hover: #6bb0ff;
+  --dark-accent-secondary: #7c3aed;
+  --dark-accent-danger: #ef4444;
+  --dark-accent-success: #10b981;
+  --dark-accent-warning: #f59e0b;
+  
+  /* Border Colors */
+  --dark-border-primary: #3a3a3a;
+  --dark-border-secondary: #4a4a4a;
+  --dark-border-focus: #4a9eff;
+  
+  /* Shadow */
+  --dark-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --dark-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --dark-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Force Dark Theme on HTML */
+html[data-theme="dark"],
+html.dark {
+  color-scheme: dark;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+html[data-theme="dark"],
+html.dark,
+html[data-theme="dark"] body,
+html.dark body {
+  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+  background-attachment: fixed;
+  color: var(--dark-text-primary);
+  min-height: 100vh;
+}
+
+html[data-theme="dark"] body,
+html.dark body {
+  margin: 0;
+  padding: 0;
+}
+
+/* ============================================
+   TYPOGRAPHY
+   ============================================ */
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: var(--dark-text-primary);
+  font-weight: 600;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] span,
+html[data-theme="dark"] div,
+html.dark p,
+html.dark span,
+html.dark div {
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .text-muted,
+html.dark .text-muted {
+  color: var(--dark-text-muted) !important;
+}
+
+html[data-theme="dark"] .text-secondary,
+html.dark .text-secondary {
+  color: var(--dark-text-secondary) !important;
+}
+
+/* ============================================
+   FORMS & INPUTS
+   ============================================ */
+
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .form-select,
+html.dark .form-control,
+html.dark .form-select {
+  background-color: var(--dark-bg-input);
+  border: 1px solid var(--dark-border-primary);
+  color: var(--dark-text-primary);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+html[data-theme="dark"] .form-control::placeholder,
+html.dark .form-control::placeholder {
+  color: var(--dark-text-muted);
+  opacity: 0.7;
+}
+
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .form-select:focus,
+html.dark .form-control:focus,
+html.dark .form-select:focus {
+  background-color: var(--dark-bg-input);
+  border-color: var(--dark-border-focus);
+  color: var(--dark-text-primary);
+  box-shadow: 0 0 0 0.2rem rgba(74, 158, 255, 0.25);
+  outline: 2px solid var(--dark-border-focus);
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .form-control:disabled,
+html[data-theme="dark"] .form-select:disabled,
+html.dark .form-control:disabled,
+html.dark .form-select:disabled {
+  background-color: var(--dark-bg-tertiary);
+  color: var(--dark-text-muted);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html[data-theme="dark"] .form-label,
+html.dark .form-label {
+  color: var(--dark-text-primary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="dark"] .form-check-input,
+html.dark .form-check-input {
+  background-color: var(--dark-bg-input);
+  border: 1px solid var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .form-check-input:checked,
+html.dark .form-check-input:checked {
+  background-color: var(--dark-accent-primary);
+  border-color: var(--dark-accent-primary);
+}
+
+html[data-theme="dark"] .form-check-input:focus,
+html.dark .form-check-input:focus {
+  border-color: var(--dark-border-focus);
+  box-shadow: 0 0 0 0.2rem rgba(74, 158, 255, 0.25);
+  outline: 2px solid var(--dark-border-focus);
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .form-check-label,
+html.dark .form-check-label {
+  color: var(--dark-text-primary);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+html[data-theme="dark"] .btn-primary,
+html.dark .btn-primary {
+  background: linear-gradient(135deg, var(--dark-accent-primary) 0%, #3a8eef 100%);
+  border: none;
+  color: var(--dark-text-inverse);
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  box-shadow: var(--dark-shadow-sm);
+}
+
+html[data-theme="dark"] .btn-primary:hover,
+html.dark .btn-primary:hover {
+  background: linear-gradient(135deg, var(--dark-accent-primary-hover) 0%, #4a9eff 100%);
+  transform: translateY(-1px);
+  box-shadow: var(--dark-shadow-md);
+}
+
+html[data-theme="dark"] .btn-primary:active,
+html.dark .btn-primary:active {
+  transform: translateY(0);
+  box-shadow: var(--dark-shadow-sm);
+}
+
+html[data-theme="dark"] .btn-primary:focus,
+html.dark .btn-primary:focus {
+  outline: 2px solid var(--dark-border-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 0.2rem rgba(74, 158, 255, 0.5);
+}
+
+html[data-theme="dark"] .btn-primary:disabled,
+html.dark .btn-primary:disabled {
+  background: var(--dark-bg-tertiary);
+  color: var(--dark-text-muted);
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+html[data-theme="dark"] .btn-outline-danger,
+html.dark .btn-outline-danger {
+  background-color: transparent;
+  border: 2px solid var(--dark-accent-danger);
+  color: var(--dark-accent-danger);
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+html[data-theme="dark"] .btn-outline-danger:hover,
+html.dark .btn-outline-danger:hover {
+  background-color: var(--dark-accent-danger);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: var(--dark-shadow-md);
+}
+
+html[data-theme="dark"] .btn-outline-danger:focus,
+html.dark .btn-outline-danger:focus {
+  outline: 2px solid var(--dark-accent-danger);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 0.2rem rgba(239, 68, 68, 0.25);
+}
+
+html[data-theme="dark"] .btn-secondary,
+html.dark .btn-secondary {
+  background-color: var(--dark-bg-tertiary);
+  border: 1px solid var(--dark-border-primary);
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .btn-secondary:hover,
+html.dark .btn-secondary:hover {
+  background-color: var(--dark-bg-hover);
+  border-color: var(--dark-border-secondary);
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+
+html[data-theme="dark"] .card,
+html.dark .card {
+  background-color: var(--dark-bg-card);
+  border: 1px solid var(--dark-border-primary);
+  border-radius: 16px;
+  box-shadow: var(--dark-shadow-lg);
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .card-body,
+html.dark .card-body {
+  background-color: transparent;
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .card-title,
+html.dark .card-title {
+  color: var(--dark-text-primary);
+  font-weight: 700;
+}
+
+/* ============================================
+   LINKS
+   ============================================ */
+
+html[data-theme="dark"] a,
+html.dark a {
+  color: var(--dark-accent-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+html[data-theme="dark"] a:hover,
+html.dark a:hover {
+  color: var(--dark-accent-primary-hover);
+  text-decoration: underline;
+}
+
+html[data-theme="dark"] a:focus,
+html.dark a:focus {
+  outline: 2px solid var(--dark-border-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+html[data-theme="dark"] .text-decoration-none:hover,
+html.dark .text-decoration-none:hover {
+  text-decoration: underline !important;
+}
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+
+html[data-theme="dark"] .navbar,
+html.dark .navbar {
+  background-color: var(--dark-bg-card) !important;
+  border-bottom: 1px solid var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .navbar-brand,
+html[data-theme="dark"] .nav-link,
+html.dark .navbar-brand,
+html.dark .nav-link {
+  color: var(--dark-text-primary) !important;
+}
+
+html[data-theme="dark"] .nav-link:hover,
+html.dark .nav-link:hover {
+  color: var(--dark-accent-primary) !important;
+}
+
+html[data-theme="dark"] .navbar-toggler,
+html.dark .navbar-toggler {
+  border-color: var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .navbar-toggler-icon,
+html.dark .navbar-toggler-icon {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28224, 224, 224, 1%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+/* ============================================
+   ALERTS & MESSAGES
+   ============================================ */
+
+html[data-theme="dark"] .alert,
+html.dark .alert {
+  background-color: var(--dark-bg-tertiary);
+  border: 1px solid var(--dark-border-primary);
+  color: var(--dark-text-primary);
+  border-radius: 8px;
+}
+
+html[data-theme="dark"] .alert-info,
+html.dark .alert-info {
+  background-color: rgba(74, 158, 255, 0.1);
+  border-color: var(--dark-accent-primary);
+  color: var(--dark-accent-primary-hover);
+}
+
+html[data-theme="dark"] .alert-danger,
+html.dark .alert-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: var(--dark-accent-danger);
+  color: #ff6b6b;
+}
+
+html[data-theme="dark"] .alert-success,
+html.dark .alert-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: var(--dark-accent-success);
+  color: #34d399;
+}
+
+html[data-theme="dark"] .alert-warning,
+html.dark .alert-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-color: var(--dark-accent-warning);
+  color: #fbbf24;
+}
+
+/* ============================================
+   DIVIDERS
+   ============================================ */
+
+html[data-theme="dark"] hr,
+html.dark hr {
+  border-color: var(--dark-border-primary);
+  opacity: 0.5;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+
+html[data-theme="dark"] .footer,
+html.dark .footer {
+  background-color: var(--dark-bg-secondary);
+  border-top: 1px solid var(--dark-border-primary);
+  color: var(--dark-text-secondary);
+}
+
+/* ============================================
+   TABLES
+   ============================================ */
+
+html[data-theme="dark"] .table,
+html.dark .table {
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd),
+html.dark .table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: var(--dark-bg-tertiary);
+}
+
+html[data-theme="dark"] .table-hover > tbody > tr:hover,
+html.dark .table-hover > tbody > tr:hover {
+  background-color: var(--dark-bg-hover);
+}
+
+/* ============================================
+   MODALS
+   ============================================ */
+
+html[data-theme="dark"] .modal-content,
+html.dark .modal-content {
+  background-color: var(--dark-bg-card);
+  border: 1px solid var(--dark-border-primary);
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .modal-header,
+html.dark .modal-header {
+  border-bottom: 1px solid var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .modal-footer,
+html.dark .modal-footer {
+  border-top: 1px solid var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .btn-close,
+html.dark .btn-close {
+  filter: invert(1);
+}
+
+/* ============================================
+   DROPDOWNS
+   ============================================ */
+
+html[data-theme="dark"] .dropdown-menu,
+html.dark .dropdown-menu {
+  background-color: var(--dark-bg-card);
+  border: 1px solid var(--dark-border-primary);
+}
+
+html[data-theme="dark"] .dropdown-item,
+html.dark .dropdown-item {
+  color: var(--dark-text-primary);
+}
+
+html[data-theme="dark"] .dropdown-item:hover,
+html.dark .dropdown-item:hover {
+  background-color: var(--dark-bg-hover);
+  color: var(--dark-text-primary);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+html[data-theme="dark"] .bg-light,
+html.dark .bg-light {
+  background-color: var(--dark-bg-secondary) !important;
+}
+
+html[data-theme="dark"] .bg-white,
+html.dark .bg-white {
+  background-color: var(--dark-bg-card) !important;
+}
+
+html[data-theme="dark"] .text-dark,
+html.dark .text-dark {
+  color: var(--dark-text-primary) !important;
+}
+
+html[data-theme="dark"] .border,
+html[data-theme="dark"] .border-bottom,
+html[data-theme="dark"] .border-top,
+html.dark .border,
+html.dark .border-bottom,
+html.dark .border-top {
+  border-color: var(--dark-border-primary) !important;
+}
+
+/* ============================================
+   ACCESSIBILITY - FOCUS INDICATORS
+   ============================================ */
+
+html[data-theme="dark"] *:focus-visible,
+html.dark *:focus-visible {
+  outline: 2px solid var(--dark-border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   VALIDATION & ERROR MESSAGES
+   ============================================ */
+
+html[data-theme="dark"] .field-validation-error,
+html[data-theme="dark"] .text-danger,
+html.dark .field-validation-error,
+html.dark .text-danger {
+  color: #ff6b6b !important;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+html[data-theme="dark"] .field-validation-valid,
+html.dark .field-validation-valid {
+  display: none;
+}
+
+html[data-theme="dark"] .input-validation-error,
+html.dark .input-validation-error {
+  border-color: var(--dark-accent-danger) !important;
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+html[data-theme="dark"] .validation-summary-errors,
+html.dark .validation-summary-errors {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--dark-accent-danger);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #ff6b6b;
+}
+
+html[data-theme="dark"] .validation-summary-errors ul,
+html.dark .validation-summary-errors ul {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+
+html[data-theme="dark"] .validation-summary-errors li,
+html.dark .validation-summary-errors li {
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================
+   LOGIN PAGE SPECIFIC STYLES
+   ============================================ */
+
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.auth-card {
+  background: var(--dark-bg-card);
+  border: 1px solid var(--dark-border-primary);
+  border-radius: 20px;
+  box-shadow: var(--dark-shadow-lg);
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.auth-title {
+  color: var(--dark-text-primary);
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.auth-subtitle {
+  color: var(--dark-text-secondary);
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.5rem 0;
+  color: var(--dark-text-muted);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--dark-border-primary);
+}
+
+.auth-divider::before {
+  margin-right: 0.5rem;
+}
+
+.auth-divider::after {
+  margin-left: 0.5rem;
+}
+

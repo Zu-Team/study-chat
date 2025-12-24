@@ -68,15 +68,31 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
+        // Try to get the Google authentication result
         var result = await HttpContext.AuthenticateAsync("Google");
-        if (!result.Succeeded)
+        
+        // If that doesn't work, try reading from the current user (middleware might have already processed it)
+        var claims = result.Succeeded ? result.Principal?.Claims : null;
+        if (claims == null)
         {
-            // Log the error for debugging
-            var error = result.Failure?.Message ?? "Unknown error";
-            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {error}" });
+            // Check if user is authenticated with Google scheme
+            if (User.Identity?.IsAuthenticated == true && User.Identity.AuthenticationType == "Google")
+            {
+                claims = User.Claims;
+            }
+            else
+            {
+                // Try to authenticate again
+                result = await HttpContext.AuthenticateAsync("Google");
+                if (!result.Succeeded)
+                {
+                    var error = result.Failure?.Message ?? "Unknown error";
+                    return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {error}" });
+                }
+                claims = result.Principal?.Claims;
+            }
         }
 
-        var claims = result.Principal?.Claims;
         if (claims == null)
         {
             return RedirectToAction("Login", new { error = "No claims received from Google" });

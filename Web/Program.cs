@@ -112,22 +112,21 @@ if (string.IsNullOrWhiteSpace(googleClientSecret))
     missingConfig.Add("Google:ClientSecret (Azure: Google__ClientSecret)");
 }
 
+// Get logger factory for validation logging
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+var startupLogger = loggerFactory.CreateLogger("Startup");
+
 if (missingConfig.Any())
 {
     var errorMessage = $"CRITICAL: Missing required configuration values:\n" +
                        string.Join("\n", missingConfig.Select(c => $"  - {c}")) +
                        "\n\nPlease configure these in Azure App Settings or User Secrets.";
     
-    // Use logger factory to create logger for top-level program
-    var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-    var logger = loggerFactory.CreateLogger("Startup");
-    logger.LogError(errorMessage);
+    startupLogger.LogError(errorMessage);
     throw new InvalidOperationException(errorMessage);
 }
 
 // Log validation success (without secrets)
-var loggerFactory2 = app.Services.GetRequiredService<ILoggerFactory>();
-var startupLogger = loggerFactory2.CreateLogger("Startup");
 startupLogger.LogInformation("Configuration validation passed. All required settings are present.");
 startupLogger.LogInformation("Database connection: CONFIGURED");
 startupLogger.LogInformation("Google OAuth: CONFIGURED");

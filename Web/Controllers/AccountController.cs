@@ -59,11 +59,11 @@ public class AccountController : Controller
 
     public IActionResult GoogleLogin()
     {
-        // RedirectUri is now set in OnTicketReceived event
-        // This will redirect to /StudyChat after authentication
+        // Set RedirectUri to our callback handler
+        // This ensures we process the authentication before redirecting to StudyChat
         var properties = new AuthenticationProperties
         {
-            RedirectUri = "/StudyChat"
+            RedirectUri = "/Account/GoogleCallback"
         };
         return Challenge(properties, "Google");
     }
@@ -71,6 +71,13 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
+        // Check if user is already authenticated (from OnTicketReceived event)
+        if (User.Identity?.IsAuthenticated == true && User.Identity.AuthenticationType == CookieAuthenticationDefaults.AuthenticationScheme)
+        {
+            // User is already signed in, redirect to StudyChat
+            return RedirectToAction("Index", "StudyChat");
+        }
+
         // Try to get the Google authentication result
         var result = await HttpContext.AuthenticateAsync("Google");
         
@@ -91,9 +98,9 @@ public class AccountController : Controller
             result.Properties.Items.TryGetValue("UserName", out userName);
         }
 
+        // If properties are not available, try to get from claims
         if (string.IsNullOrEmpty(userId))
         {
-            // Fallback: try to get from claims
             var claims = result.Principal?.Claims;
             if (claims != null)
             {
@@ -119,7 +126,7 @@ public class AccountController : Controller
         // Create local claims for cookie authentication
         var localClaims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, userId ?? string.Empty),
+            new Claim(ClaimTypes.NameIdentifier, userId),
             new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
             new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
         };

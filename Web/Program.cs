@@ -149,13 +149,28 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            // Store user ID in properties so we can use it in the callback
-            context.Properties.Items["UserId"] = user.Id.ToString();
-            context.Properties.Items["UserEmail"] = user.Email ?? string.Empty;
-            context.Properties.Items["UserName"] = user.FullName ?? user.Email ?? string.Empty;
+            // Create local claims for cookie authentication
+            var localClaims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.FullName ?? user.Email ?? string.Empty)
+            };
+
+            var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
             
-            // Set redirect URI to our callback handler
-            context.Properties.RedirectUri = "/Account/GoogleCallback";
+            // Sign in with cookies directly
+            await context.HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(claimsIdentity),
+                new AuthenticationProperties
+                {
+                    IsPersistent = true,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+                });
+            
+            // Set redirect URI to StudyChat (user is already signed in)
+            context.Properties.RedirectUri = "/StudyChat";
             
             logger.LogInformation("Google authentication successful for user: {Email}, UserId: {UserId}", email, user.Id);
         }

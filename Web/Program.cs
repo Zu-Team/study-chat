@@ -68,7 +68,9 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = "Google";
+    // Challenge unauthenticated users to the login page by default.
+    // Google is still available via explicit Challenge("Google") on the relevant endpoints.
+    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {

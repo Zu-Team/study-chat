@@ -94,6 +94,7 @@
         </script>
         
         <form asp-action="Login" method="post">
+            <input type="hidden" name="returnUrl" value="@ViewContext.HttpContext.Request.Query["ReturnUrl"]" />
             @if (!ViewData.ModelState.IsValid)
             {
                 <div class="validation-summary-errors">

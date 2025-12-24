@@ -173,14 +173,8 @@ builder.Services.AddAuthentication(options =>
                     ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
                 });
             
-            // Mark the ticket as handled
-            context.HandleCodeRedemption();
-            
             // Set the redirect URI - the OAuth middleware will handle the redirect
             context.Properties.RedirectUri = "/StudyChat";
-            
-            // Set the result to success so the middleware continues
-            context.Result = Microsoft.AspNetCore.Authentication.AuthenticateResult.Success(claimsPrincipal);
             
             logger.LogInformation("Google authentication successful, redirecting to /StudyChat for user: {Email}, UserId: {UserId}", email, user.Id);
         }

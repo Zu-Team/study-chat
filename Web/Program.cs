@@ -261,6 +261,24 @@ startupLogger.LogInformation("Configuration validation passed. All required sett
 startupLogger.LogInformation("Database connection: CONFIGURED");
 startupLogger.LogInformation("Google OAuth: CONFIGURED");
 
+// ============================================
+// DATABASE INITIALIZATION (NO MIGRATIONS IN REPO)
+// ============================================
+// This project currently has no EF Core migrations committed. In that case, a fresh database will not
+// have the required tables (users/chats/messages/...) and the StudyChat page will crash with a 500.
+// EnsureCreated() will create the schema from the current model if it doesn't exist.
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var created = await db.Database.EnsureCreatedAsync();
+    startupLogger.LogInformation("Database EnsureCreated completed. CreatedNewSchema={Created}", created);
+}
+catch (Exception ex)
+{
+    startupLogger.LogError(ex, "Database initialization failed (EnsureCreated). The app may not function correctly until the database is reachable and initialized.");
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

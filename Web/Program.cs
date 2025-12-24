@@ -29,6 +29,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 //    dotnet ef database update
 //
 // See DATABASE_SETUP.md for detailed instructions and connection string configuration.
+// Triggering workflow rerun
 
 // Register services
 builder.Services.AddScoped<IStudentService, StudentService>();

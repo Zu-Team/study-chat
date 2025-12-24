@@ -57,7 +57,9 @@
             </div>
 
             <div class="mb-4 form-check">
-                <input type="checkbox" class="form-check-input" id="agreeTerms" name="agreeTerms" required />
+                <!-- ASP.NET Core binds bool from "true/false" (not "on"). -->
+                <input type="hidden" name="agreeTerms" value="false" />
+                <input type="checkbox" class="form-check-input" id="agreeTerms" name="agreeTerms" value="true" required />
                 <label class="form-check-label" for="agreeTerms">
                     I agree to the <a href="#" class="text-decoration-none">Terms and Conditions</a>
                 </label>

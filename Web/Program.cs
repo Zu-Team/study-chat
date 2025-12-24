@@ -151,9 +151,19 @@ builder.Services.AddAuthentication(options =>
         var serviceProvider = context.HttpContext.RequestServices;
         var userService = serviceProvider.GetRequiredService<UserService>();
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
+        var flow = context.Properties?.Items.TryGetValue("flow", out var f) == true ? f : null;
         
         try
         {
+            // "register" flow: do NOT touch DB / do NOT replace principal.
+            // The controller callback will handle "create if not exists" and then redirect to Login.
+            if (string.Equals(flow, "register", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("Google auth flow=register; skipping DB upsert and principal replacement. RedirectUri={RedirectUri}", context.Properties?.RedirectUri);
+                return;
+            }
+
             // Extract Google claims
             var claims = context.Principal?.Claims;
             if (claims == null)

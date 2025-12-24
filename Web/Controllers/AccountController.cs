@@ -212,7 +212,71 @@ public class AccountController : Controller
 
         var redirectUri = Url.Action("GoogleCallback", "Account", new { returnUrl }) ?? "/Account/GoogleCallback";
         var properties = new AuthenticationProperties { RedirectUri = redirectUri };
+        properties.Items["flow"] = "login";
         return Challenge(properties, "Google");
+    }
+
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleRegister()
+    {
+        // Ensure we start from a clean session (avoid reusing an existing auth cookie).
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        var redirectUri = Url.Action("GoogleRegisterCallback", "Account") ?? "/Account/GoogleRegisterCallback";
+        var properties = new AuthenticationProperties { RedirectUri = redirectUri };
+        properties.Items["flow"] = "register";
+        return Challenge(properties, "Google");
+    }
+
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleRegisterCallback()
+    {
+        var traceId = HttpContext.TraceIdentifier;
+
+        try
+        {
+            // In the "register" flow we intentionally do NOT sign the user into the app.
+            // We only create the account if it doesn't exist, then redirect to Login.
+
+            // The Google handler signs into the cookie scheme (SignInScheme) before we get here,
+            // so we can read claims from HttpContext.User (or explicitly authenticate the cookie).
+            var principal = User;
+            if (principal?.Identity?.IsAuthenticated != true)
+            {
+                var cookieResult = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                principal = cookieResult.Principal ?? principal;
+            }
+
+            var claims = principal?.Claims;
+            var googleSub = claims?.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var email = claims?.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
+            var name = claims?.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
+
+            if (string.IsNullOrWhiteSpace(googleSub) || string.IsNullOrWhiteSpace(email))
+            {
+                return RedirectToAction("Login", "Account",
+                    new { error = $"Google sign-up did not return required profile info. Ref: {traceId}" });
+            }
+
+            var created = await _userService.CreateGoogleUserIfNotExistsAsync(googleSub, email, name);
+
+            // End the temporary cookie session created by the Google handler.
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            return RedirectToAction("Login", "Account", new
+            {
+                message = created
+                    ? "Google account created successfully. Please sign in."
+                    : "An account with this email already exists. Please sign in."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GoogleRegisterCallback failed. TraceId={TraceId}", traceId);
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction("Login", "Account",
+                new { error = $"Google sign-up failed due to a server error. Ref: {traceId}" });
+        }
     }
 
     [AllowAnonymous]

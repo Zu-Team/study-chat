@@ -65,10 +65,22 @@ public class UserService
             LastLoginAt = now
         };
 
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
 
-        return user;
+            return user;
+        }
+        catch (Exception ex)
+        {
+            // Log and rethrow to see the actual error
+            throw new Exception($"Database error in UpsertGoogleUserAsync: {ex.Message}", ex);
+        }
+    }
+        catch (Exception ex)
+        {
+            // Log and rethrow to see the actual error
+            throw new Exception($"Database error in UpsertGoogleUserAsync: {ex.Message}", ex);
+        }
     }
 
     public async Task<User?> GetUserByIdAsync(Guid userId)

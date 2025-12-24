@@ -134,7 +134,19 @@ builder.Services.AddAuthentication(options =>
             }
 
             // Upsert user in database
-            var user = await userService.UpsertGoogleUserAsync(googleSub, email, name);
+            logger.LogInformation("Attempting to upsert user: Email={Email}, GoogleSub={GoogleSub}", email, googleSub);
+            User user;
+            try
+            {
+                user = await userService.UpsertGoogleUserAsync(googleSub, email, name);
+                logger.LogInformation("User upserted successfully: UserId={UserId}, Email={Email}", user.Id, user.Email);
+            }
+            catch (Exception dbEx)
+            {
+                logger.LogError(dbEx, "Database error while upserting user: {Message}", dbEx.Message);
+                context.Fail($"Database error: {dbEx.Message}");
+                return;
+            }
 
             // Store user ID in properties so we can use it in the callback
             context.Properties.Items["UserId"] = user.Id.ToString();
@@ -144,7 +156,7 @@ builder.Services.AddAuthentication(options =>
             // Set redirect URI to our callback handler
             context.Properties.RedirectUri = "/Account/GoogleCallback";
             
-            logger.LogInformation("Google authentication successful for user: {Email}", email);
+            logger.LogInformation("Google authentication successful for user: {Email}, UserId: {UserId}", email, user.Id);
         }
         catch (Exception ex)
         {
@@ -219,6 +231,15 @@ app.MapStaticAssets();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}")
-    .WithStaticAssets();
+    .WithStaticAssets()
+    .RequireAuthorization(); // This will require auth for all routes except those with [AllowAnonymous]
+
+// Add explicit route for StudyChat to ensure it works
+app.MapControllerRoute(
+    name: "studychat",
+    pattern: "StudyChat/{action=Index}/{id?}",
+    defaults: new { controller = "StudyChat", action = "Index" })
+    .WithStaticAssets()
+    .RequireAuthorization();
 
 app.Run();

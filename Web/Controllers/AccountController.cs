@@ -65,8 +65,19 @@ public class AccountController : Controller
 
     public IActionResult GoogleLogin()
     {
-        // Set the redirect URI so after Google auth, we go to GoogleCallback which will redirect to StudyChat
-        var properties = new AuthenticationProperties { RedirectUri = "/Account/GoogleCallback" };
+        // Default to StudyChat after Google auth. If a ReturnUrl is present (e.g., user tried to open a protected page),
+        // we carry it through as long as it's a local URL.
+        var returnUrl = Request.Query["returnUrl"].ToString();
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
+        }
+        else if (!Url.IsLocalUrl(returnUrl))
+        {
+            returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
+        }
+
+        var properties = new AuthenticationProperties { RedirectUri = returnUrl };
         return Challenge(properties, "Google");
     }
 

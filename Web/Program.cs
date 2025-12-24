@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +52,8 @@ builder.Services.AddScoped<ChatService>();
 // ============================================
 // AUTHENTICATION CONFIGURATION
 // ============================================
+var isDevelopment = builder.Environment.IsDevelopment();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -66,8 +69,11 @@ builder.Services.AddAuthentication(options =>
     
     // Cookie security settings for production
     options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Requires HTTPS
-    options.Cookie.SameSite = SameSiteMode.Lax; // Allows OAuth redirects
+    // IMPORTANT:
+    // - In production, cookies should be Secure-only (requires HTTPS).
+    // - In development, allowing HTTP avoids "cookie not created" when running the http profile.
+    options.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Lax; // Allows OAuth redirects on top-level navigations
 })
 .AddGoogle("Google", options =>
 {
@@ -89,6 +95,12 @@ builder.Services.AddAuthentication(options =>
     // Request additional scopes
     options.Scope.Add("email");
     options.Scope.Add("profile");
+
+    // The OAuth handler uses a correlation cookie to validate the callback.
+    // If this is marked Secure on an HTTP dev run, the browser will drop it and auth will fail.
+    options.CorrelationCookie.HttpOnly = true;
+    options.CorrelationCookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+    options.CorrelationCookie.SameSite = SameSiteMode.Lax;
     
     // Note: In .NET 9.0, Google OAuth automatically maps standard claims:
     // - "sub" -> ClaimTypes.NameIdentifier
@@ -239,6 +251,20 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Account/Login");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+
+// If running behind a reverse proxy (e.g., Azure), honor forwarded headers so scheme/host are correct.
+// This helps ensure auth redirects/cookies behave correctly in production deployments.
+if (!app.Environment.IsDevelopment())
+{
+    var forwardedHeadersOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    };
+    // Azure/App Service sits behind trusted proxies; clear defaults so forwarded headers are applied.
+    forwardedHeadersOptions.KnownNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    app.UseForwardedHeaders(forwardedHeadersOptions);
 }
 
 app.UseHttpsRedirection();

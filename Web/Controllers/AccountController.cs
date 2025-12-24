@@ -1,22 +1,14 @@
-using System.Linq;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using Web.Services;
 
 namespace Web.Controllers;
 
 public class AccountController : Controller
 {
-    private readonly UserService _userService;
-
-    public AccountController(UserService userService)
-    {
-        _userService = userService;
-    }
+    public AccountController() { }
 
     public IActionResult Login()
     {
@@ -68,83 +60,23 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
-        // Check if user is already authenticated (from OnTicketReceived event)
-        if (User.Identity?.IsAuthenticated == true && User.Identity.AuthenticationType == CookieAuthenticationDefaults.AuthenticationScheme)
+        // The Google handler completes on /signin-google and should sign the user into the Cookie scheme
+        // (we do this in Program.cs via OnTicketReceived). This endpoint should only verify cookie auth.
+        var cookieResult = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        if (cookieResult.Succeeded && cookieResult.Principal?.Identity?.IsAuthenticated == true)
         {
-            // User is already signed in, redirect to StudyChat
             return RedirectToAction("Index", "StudyChat");
         }
 
-        // Try to get the Google authentication result
-        var result = await HttpContext.AuthenticateAsync("Google");
-        
-        if (!result.Succeeded)
+        var logger = HttpContext.RequestServices.GetRequiredService<ILogger<AccountController>>();
+        var failure = cookieResult.Failure?.Message ?? "No auth cookie found after Google sign-in.";
+        logger.LogError("GoogleCallback reached without a valid auth cookie. Failure: {Failure}", failure);
+
+        // Common dev cause: running over HTTP while cookies are configured as Secure-only.
+        return RedirectToAction("Login", "Account", new
         {
-            var errorMsg = result.Failure?.Message ?? "Unknown error";
-            // Log the error for debugging
-            var logger = HttpContext.RequestServices.GetRequiredService<ILogger<AccountController>>();
-            logger.LogError("Google authentication failed in GoogleCallback: {Error}", errorMsg);
-            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {errorMsg}" });
-        }
-
-        // The user should already be signed in from OnTicketReceived
-        // But if not, try to get user info from properties or claims
-        string? userId = null;
-        string? userEmail = null;
-        string? userName = null;
-        
-        if (result.Properties?.Items != null)
-        {
-            result.Properties.Items.TryGetValue("UserId", out userId);
-            result.Properties.Items.TryGetValue("UserEmail", out userEmail);
-            result.Properties.Items.TryGetValue("UserName", out userName);
-        }
-
-        // If properties are not available, try to get from claims and upsert user
-        if (string.IsNullOrEmpty(userId))
-        {
-            var claims = result.Principal?.Claims;
-            if (claims != null)
-            {
-                var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
-                var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
-
-                if (!string.IsNullOrEmpty(googleSub) && !string.IsNullOrEmpty(email))
-                {
-                    var user = await _userService.UpsertGoogleUserAsync(googleSub, email, name);
-                    userId = user.Id.ToString();
-                    userEmail = user.Email;
-                    userName = user.FullName ?? user.Email;
-
-                    // Sign in with cookies if not already signed in
-                    var localClaims = new List<Claim>
-                    {
-                        new Claim(ClaimTypes.NameIdentifier, userId),
-                        new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
-                        new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
-                    };
-
-                    var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
-                    var authProperties = new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-                    };
-
-                    await HttpContext.SignInAsync(
-                        CookieAuthenticationDefaults.AuthenticationScheme,
-                        new ClaimsPrincipal(claimsIdentity),
-                        authProperties);
-                }
-            }
-        }
-
-        // Sign out from Google scheme (cleanup)
-        await HttpContext.SignOutAsync("Google");
-
-        // Redirect to StudyChat
-        return RedirectToAction("Index", "StudyChat");
+            error = "Sign-in succeeded but no auth cookie was created. If you're developing, run the HTTPS profile (or ensure cookie SecurePolicy isn't Always on HTTP)."
+        });
     }
 
     public async Task<IActionResult> Logout()

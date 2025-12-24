@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Web.Services;
 
 namespace Web.Controllers;
@@ -42,11 +43,60 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    public IActionResult Register(string email, string password, string confirmPassword)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Register(string fullName, string email, string password, bool agreeTerms)
     {
-        // TODO: Implement registration logic
-        // For now, this is just a placeholder
-        return RedirectToAction("Login");
+        if (!agreeTerms)
+        {
+            ModelState.AddModelError(string.Empty, "You must agree to the Terms and Conditions.");
+        }
+
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            ModelState.AddModelError(nameof(fullName), "Full name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            ModelState.AddModelError(nameof(email), "Email is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            ModelState.AddModelError(nameof(password), "Password is required.");
+        }
+        else if (password.Length < 8)
+        {
+            ModelState.AddModelError(nameof(password), "Password must be at least 8 characters.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View();
+        }
+
+        try
+        {
+            // Create the DB row (this is your DB connectivity check).
+            await _userService.CreateLocalUserAsync(email, password, fullName);
+            return RedirectToAction("Login", new { message = "Account created successfully. You can now log in." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // e.g., duplicate email
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return View();
+        }
+        catch (DbUpdateException)
+        {
+            ModelState.AddModelError(string.Empty, "Database error while creating the account. Please verify the connection string and schema.");
+            return View();
+        }
+        catch (Exception)
+        {
+            ModelState.AddModelError(string.Empty, "Unexpected server error while creating the account.");
+            return View();
+        }
     }
 
     public IActionResult ForgotPassword()

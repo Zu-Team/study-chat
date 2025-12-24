@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Web.Data;
 using Web.Services;
 
@@ -116,13 +117,17 @@ if (missingConfig.Any())
     var errorMessage = $"CRITICAL: Missing required configuration values:\n" +
                        string.Join("\n", missingConfig.Select(c => $"  - {c}")) +
                        "\n\nPlease configure these in Azure App Settings or User Secrets.";
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    
+    // Use logger factory to create logger for top-level program
+    var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger("Startup");
     logger.LogError(errorMessage);
     throw new InvalidOperationException(errorMessage);
 }
 
 // Log validation success (without secrets)
-var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+var loggerFactory2 = app.Services.GetRequiredService<ILoggerFactory>();
+var startupLogger = loggerFactory2.CreateLogger("Startup");
 startupLogger.LogInformation("Configuration validation passed. All required settings are present.");
 startupLogger.LogInformation("Database connection: CONFIGURED");
 startupLogger.LogInformation("Google OAuth: CONFIGURED");

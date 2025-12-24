@@ -264,7 +264,9 @@ startupLogger.LogInformation("Google OAuth: CONFIGURED");
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Account/Login");
+    // Do not redirect all server errors to the login page (it hides real 500s and looks like auth failed).
+    // Send users to a real error page with a RequestId so we can debug production issues.
+    app.UseExceptionHandler("/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }

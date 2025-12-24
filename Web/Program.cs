@@ -89,10 +89,10 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("profile");
     
     // Map Google claims to standard claim types
-    options.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "sub");
-    options.ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
-    options.ClaimActions.MapJsonKey(ClaimTypes.Name, "name");
-    options.ClaimActions.MapJsonKey("picture", "picture");
+    options.ClaimActions.MapJsonClaim(ClaimTypes.NameIdentifier, "sub");
+    options.ClaimActions.MapJsonClaim(ClaimTypes.Email, "email");
+    options.ClaimActions.MapJsonClaim(ClaimTypes.Name, "name");
+    options.ClaimActions.MapJsonClaim("picture", "picture");
 });
 
 var app = builder.Build();

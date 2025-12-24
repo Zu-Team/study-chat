@@ -38,42 +38,6 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 
 // ============================================
-// STARTUP CONFIGURATION VALIDATION
-// ============================================
-// Validate required configuration (without logging secrets)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-var googleClientId = builder.Configuration["Google:ClientId"];
-var googleClientSecret = builder.Configuration["Google:ClientSecret"];
-
-var missingConfig = new List<string>();
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    missingConfig.Add("ConnectionStrings:DefaultConnection (Azure: ConnectionStrings__DefaultConnection)");
-}
-if (string.IsNullOrWhiteSpace(googleClientId))
-{
-    missingConfig.Add("Google:ClientId (Azure: Google__ClientId)");
-}
-if (string.IsNullOrWhiteSpace(googleClientSecret))
-{
-    missingConfig.Add("Google:ClientSecret (Azure: Google__ClientSecret)");
-}
-
-if (missingConfig.Any())
-{
-    var errorMessage = $"CRITICAL: Missing required configuration values:\n" +
-                       string.Join("\n", missingConfig.Select(c => $"  - {c}")) +
-                       "\n\nPlease configure these in Azure App Settings or User Secrets.";
-    Console.Error.WriteLine(errorMessage);
-    throw new InvalidOperationException(errorMessage);
-}
-
-// Log validation success (without secrets) - will be logged when app starts
-Console.WriteLine("[Startup] Configuration validation passed. All required settings are present.");
-Console.WriteLine("[Startup] Database connection: CONFIGURED");
-Console.WriteLine("[Startup] Google OAuth: CONFIGURED");
-
-// ============================================
 // AUTHENTICATION CONFIGURATION
 // ============================================
 builder.Services.AddAuthentication(options =>
@@ -98,9 +62,13 @@ builder.Services.AddAuthentication(options =>
 {
     // Read from configuration (Azure App Settings: Google__ClientId, Google__ClientSecret)
     // Or User Secrets (Development): Google:ClientId, Google:ClientSecret
-    // Note: Configuration is already validated above
-    options.ClientId = googleClientId!;
-    options.ClientSecret = googleClientSecret!;
+    // Note: Validation happens at runtime, not during build
+    var clientId = builder.Configuration["Google:ClientId"];
+    var clientSecret = builder.Configuration["Google:ClientSecret"];
+
+    // Allow null during build - validation happens at runtime
+    options.ClientId = clientId ?? string.Empty;
+    options.ClientSecret = clientSecret ?? string.Empty;
     
     // Custom callback path (must match in Google Cloud Console)
     // For Azure: https://studychat.azurewebsites.net/Account/GoogleCallback
@@ -119,6 +87,45 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+
+// ============================================
+// RUNTIME CONFIGURATION VALIDATION
+// ============================================
+// Validate required configuration at runtime (not during build)
+// This allows the app to build without secrets, but fail fast at startup if missing
+var connectionString = app.Configuration.GetConnectionString("DefaultConnection");
+var googleClientId = app.Configuration["Google:ClientId"];
+var googleClientSecret = app.Configuration["Google:ClientSecret"];
+
+var missingConfig = new List<string>();
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    missingConfig.Add("ConnectionStrings:DefaultConnection (Azure: ConnectionStrings__DefaultConnection)");
+}
+if (string.IsNullOrWhiteSpace(googleClientId))
+{
+    missingConfig.Add("Google:ClientId (Azure: Google__ClientId)");
+}
+if (string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    missingConfig.Add("Google:ClientSecret (Azure: Google__ClientSecret)");
+}
+
+if (missingConfig.Any())
+{
+    var errorMessage = $"CRITICAL: Missing required configuration values:\n" +
+                       string.Join("\n", missingConfig.Select(c => $"  - {c}")) +
+                       "\n\nPlease configure these in Azure App Settings or User Secrets.";
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(errorMessage);
+    throw new InvalidOperationException(errorMessage);
+}
+
+// Log validation success (without secrets)
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+startupLogger.LogInformation("Configuration validation passed. All required settings are present.");
+startupLogger.LogInformation("Database connection: CONFIGURED");
+startupLogger.LogInformation("Google OAuth: CONFIGURED");
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

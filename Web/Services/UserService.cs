@@ -2,6 +2,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Npgsql;
+using Microsoft.Extensions.Logging;
 using Web.Data;
 using Web.Models;
 
@@ -10,10 +11,12 @@ namespace Web.Services;
 public class UserService
 {
     private readonly ApplicationDbContext _context;
+    private readonly ILogger<UserService> _logger;
 
-    public UserService(ApplicationDbContext context)
+    public UserService(ApplicationDbContext context, ILogger<UserService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<User> CreateLocalUserAsync(string email, string password, string? fullName)
@@ -183,6 +186,50 @@ public class UserService
         if (user == null) throw new ArgumentNullException(nameof(user));
         user.LastLoginAt = DateTimeOffset.UtcNow;
         await _context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Best-effort metadata update after a successful login.
+    /// This should never prevent the user from signing in (e.g., when UPDATE is blocked by RLS/policies).
+    /// </summary>
+    public async Task TryUpdateLoginMetadataAsync(User user, string? newPasswordHash = null)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+
+        var priorLastLogin = user.LastLoginAt;
+        var priorPasswordHash = user.PasswordHash;
+
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(newPasswordHash))
+        {
+            user.PasswordHash = newPasswordHash;
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx)
+        {
+            // Typical for Supabase when RLS/policies deny UPDATE.
+            _logger.LogWarning(
+                ex,
+                "Failed to persist login metadata (likely DB permission/RLS). SqlState={SqlState}, Constraint={Constraint}",
+                pgEx.SqlState,
+                pgEx.ConstraintName);
+
+            // Revert in-memory changes so the scoped DbContext doesn't carry failed modifications.
+            user.LastLoginAt = priorLastLogin;
+            user.PasswordHash = priorPasswordHash;
+            _context.Entry(user).State = EntityState.Unchanged;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist login metadata (non-fatal).");
+            user.LastLoginAt = priorLastLogin;
+            user.PasswordHash = priorPasswordHash;
+            _context.Entry(user).State = EntityState.Unchanged;
+        }
     }
 }
 

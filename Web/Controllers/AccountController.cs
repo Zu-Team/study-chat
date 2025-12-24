@@ -84,13 +84,12 @@ public class AccountController : Controller
                 return View();
             }
 
-            // Rehash if needed (e.g., algorithm/work factor changed).
+            // Optional rehash (don't let DB UPDATE permission issues break sign-in).
+            string? newPasswordHash = null;
             if (result == PasswordVerificationResult.SuccessRehashNeeded)
             {
-                user.PasswordHash = hasher.HashPassword(user, password);
+                newPasswordHash = hasher.HashPassword(user, password);
             }
-
-            await _userService.UpdateLastLoginAsync(user);
 
             var claims = new List<Claim>
             {
@@ -115,6 +114,10 @@ public class AccountController : Controller
             }
 
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, props);
+
+            // Best-effort: persist last_login_at and optional password rehash.
+            // If UPDATE is blocked by DB policies/RLS, keep the user logged in.
+            await _userService.TryUpdateLoginMetadataAsync(user, newPasswordHash);
             return LocalRedirect(returnUrl);
         }
         catch (Exception ex)

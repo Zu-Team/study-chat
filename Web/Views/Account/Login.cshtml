@@ -15,6 +15,77 @@
             </div>
         }
         
+        <!-- Debug Information -->
+        <div id="debug-info" style="display: none; background: #1a1a1a; padding: 15px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px; color: #00ff00;">
+            <strong style="color: #ff6b6b;">Debug Information:</strong>
+            <pre id="debug-content"></pre>
+        </div>
+        
+        <script>
+        // Debug script to log authentication flow
+        (function() {
+            const debugInfo = {
+                url: window.location.href,
+                pathname: window.location.pathname,
+                search: window.location.search,
+                hash: window.location.hash,
+                cookies: document.cookie,
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString()
+            };
+            
+            console.log('=== Google OAuth Debug Info ===');
+            console.log('URL:', debugInfo.url);
+            console.log('Path:', debugInfo.pathname);
+            console.log('Query:', debugInfo.search);
+            console.log('Cookies:', debugInfo.cookies);
+            console.log('Timestamp:', debugInfo.timestamp);
+            
+            // Check if we're on the callback URL
+            if (window.location.pathname.includes('GoogleCallback')) {
+                console.warn('⚠️ On GoogleCallback URL but seeing login page!');
+                console.log('This means authentication failed or was not processed correctly.');
+                
+                // Show debug info on page
+                const debugDiv = document.getElementById('debug-info');
+                const debugContent = document.getElementById('debug-content');
+                if (debugDiv && debugContent) {
+                    debugDiv.style.display = 'block';
+                    debugContent.textContent = JSON.stringify(debugInfo, null, 2);
+                }
+            }
+            
+            // Monitor for redirects
+            let redirectCount = 0;
+            const originalPushState = history.pushState;
+            const originalReplaceState = history.replaceState;
+            
+            history.pushState = function() {
+                redirectCount++;
+                console.log(`🔄 Redirect #${redirectCount}:`, arguments[2]);
+                return originalPushState.apply(history, arguments);
+            };
+            
+            history.replaceState = function() {
+                redirectCount++;
+                console.log(`🔄 Replace State #${redirectCount}:`, arguments[2]);
+                return originalReplaceState.apply(history, arguments);
+            };
+            
+            // Log when page is about to unload (redirect happening)
+            window.addEventListener('beforeunload', function() {
+                console.log('🚪 Page unloading - redirect happening');
+            });
+            
+            // Check for error in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const error = urlParams.get('error');
+            if (error) {
+                console.error('❌ Error in URL:', error);
+            }
+        })();
+        </script>
+        
         <form asp-action="Login" method="post">
             @if (!ViewData.ModelState.IsValid)
             {

@@ -68,8 +68,28 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
+        // Debug: Log all request information
+        var debugInfo = new
+        {
+            Url = Request.Path + Request.QueryString,
+            UserAuthenticated = User.Identity?.IsAuthenticated,
+            UserAuthType = User.Identity?.AuthenticationType,
+            UserClaimsCount = User.Claims?.Count() ?? 0,
+            QueryParams = Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()),
+            Cookies = Request.Cookies.Keys.ToList()
+        };
+
         // Try to get the Google authentication result
         var result = await HttpContext.AuthenticateAsync("Google");
+        
+        // Debug: Log authentication result
+        var authDebug = new
+        {
+            Succeeded = result.Succeeded,
+            FailureMessage = result.Failure?.Message,
+            PrincipalClaimsCount = result.Principal?.Claims?.Count() ?? 0,
+            TicketProperties = result.Properties?.Items?.Keys.ToList()
+        };
         
         // If that doesn't work, try reading from the current user (middleware might have already processed it)
         var claims = result.Succeeded ? result.Principal?.Claims : null;
@@ -86,8 +106,9 @@ public class AccountController : Controller
                 result = await HttpContext.AuthenticateAsync("Google");
                 if (!result.Succeeded)
                 {
-                    var error = result.Failure?.Message ?? "Unknown error";
-                    return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {error}" });
+                    // Return debug information in the error
+                    var errorDetails = $"Auth failed. Debug: Succeeded={authDebug.Succeeded}, Failure={authDebug.FailureMessage}, UserAuth={debugInfo.UserAuthenticated}, UserType={debugInfo.UserAuthType}, UserClaims={debugInfo.UserClaimsCount}";
+                    return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {errorDetails}" });
                 }
                 claims = result.Principal?.Claims;
             }

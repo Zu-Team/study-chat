@@ -84,5 +84,11 @@ public class UserService
         return await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
     }
+
+    public async Task<User?> GetUserByEmailAsync(string email)
+    {
+        return await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
+    }
 }
 

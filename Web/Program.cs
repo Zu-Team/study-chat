@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -93,6 +94,64 @@ builder.Services.AddAuthentication(options =>
     // - "email" -> ClaimTypes.Email  
     // - "name" -> ClaimTypes.Name
     // Additional claims like "picture" can be accessed directly in the callback handler
+    
+    // Handle authentication directly when ticket is received
+    options.Events.OnCreatingTicket = async context =>
+    {
+        // This event fires when Google authentication succeeds
+        // We'll handle user creation and cookie sign-in here
+        // The RedirectUri will be used after this event completes
+    };
+    
+    // Handle after ticket is created - this is where we process the user
+    options.Events.OnTicketReceived = async context =>
+    {
+        // Get the service provider to access UserService
+        var serviceProvider = context.HttpContext.RequestServices;
+        var userService = serviceProvider.GetRequiredService<UserService>();
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        
+        try
+        {
+            // Extract Google claims
+            var claims = context.Principal?.Claims;
+            if (claims == null)
+            {
+                logger.LogWarning("No claims received from Google");
+                context.Fail("No claims received from Google");
+                return;
+            }
+
+            var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
+            var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
+
+            if (string.IsNullOrEmpty(googleSub) || string.IsNullOrEmpty(email))
+            {
+                logger.LogWarning("Missing required Google claims: sub={Sub}, email={Email}", googleSub, email);
+                context.Fail("Missing required Google claims");
+                return;
+            }
+
+            // Upsert user in database
+            var user = await userService.UpsertGoogleUserAsync(googleSub, email, name);
+
+            // Store user ID in properties so we can use it in the callback
+            context.Properties.Items["UserId"] = user.Id.ToString();
+            context.Properties.Items["UserEmail"] = user.Email;
+            context.Properties.Items["UserName"] = user.FullName ?? user.Email;
+            
+            // Set redirect URI to our callback handler
+            context.Properties.RedirectUri = "/Account/GoogleCallback";
+            
+            logger.LogInformation("Google authentication successful for user: {Email}", email);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing Google authentication");
+            context.Fail($"Error processing authentication: {ex.Message}");
+        }
+    };
 });
 
 var app = builder.Build();

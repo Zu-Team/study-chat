@@ -58,9 +58,11 @@ public class AccountController : Controller
 
     public IActionResult GoogleLogin()
     {
+        // RedirectUri is now set in OnTicketReceived event
+        // This will redirect to /StudyChat after authentication
         var properties = new AuthenticationProperties
         {
-            RedirectUri = Url.Action("GoogleCallback", "Account")
+            RedirectUri = "/StudyChat"
         };
         return Challenge(properties, "Google");
     }

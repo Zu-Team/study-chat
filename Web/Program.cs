@@ -100,12 +100,13 @@ var app = builder.Build();
 // ============================================
 // Validate required configuration at runtime (not during build)
 // This allows the app to build without secrets, but fail fast at startup if missing
-var connectionString = app.Configuration.GetConnectionString("DefaultConnection");
+// Re-read connection string at runtime (it was read earlier for DbContext setup)
+var runtimeConnectionString = app.Configuration.GetConnectionString("DefaultConnection");
 var googleClientId = app.Configuration["Google:ClientId"];
 var googleClientSecret = app.Configuration["Google:ClientSecret"];
 
 var missingConfig = new List<string>();
-if (string.IsNullOrWhiteSpace(connectionString))
+if (string.IsNullOrWhiteSpace(runtimeConnectionString))
 {
     missingConfig.Add("ConnectionStrings:DefaultConnection (Azure: ConnectionStrings__DefaultConnection)");
 }

@@ -173,9 +173,8 @@ builder.Services.AddAuthentication(options =>
                     ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
                 });
             
-            // Set redirect URI to callback action (which will then redirect to StudyChat)
-            // This ensures the cookie is fully set before accessing protected routes
-            context.Properties.RedirectUri = "/Account/GoogleCallback";
+            // Set redirect URI directly to StudyChat since user is already signed in
+            context.Properties.RedirectUri = "/StudyChat";
             
             logger.LogInformation("Google authentication successful for user: {Email}, UserId: {UserId}", email, user.Id);
         }
@@ -249,11 +248,11 @@ app.UseAuthorization();
 
 app.MapStaticAssets();
 
+// Map routes without requiring authorization (authorization is handled per-controller/action)
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}")
-    .WithStaticAssets()
-    .RequireAuthorization(); // This will require auth for all routes except those with [AllowAnonymous]
+    .WithStaticAssets();
 
 // Add explicit route for StudyChat to ensure it works
 app.MapControllerRoute(

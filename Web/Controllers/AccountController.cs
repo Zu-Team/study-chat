@@ -70,76 +70,50 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
-        // Debug: Log all request information
-        var debugInfo = new
-        {
-            Url = Request.Path + Request.QueryString,
-            UserAuthenticated = User.Identity?.IsAuthenticated,
-            UserAuthType = User.Identity?.AuthenticationType,
-            UserClaimsCount = User.Claims?.Count() ?? 0,
-            QueryParams = Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()),
-            Cookies = Request.Cookies.Keys.ToList()
-        };
-
         // Try to get the Google authentication result
         var result = await HttpContext.AuthenticateAsync("Google");
         
-        // Debug: Log authentication result
-        var authDebug = new
+        if (!result.Succeeded)
         {
-            Succeeded = result.Succeeded,
-            FailureMessage = result.Failure?.Message,
-            PrincipalClaimsCount = result.Principal?.Claims?.Count() ?? 0,
-            TicketProperties = result.Properties?.Items?.Keys.ToList()
-        };
-        
-        // If that doesn't work, try reading from the current user (middleware might have already processed it)
-        var claims = result.Succeeded ? result.Principal?.Claims : null;
-        if (claims == null)
+            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {result.Failure?.Message ?? "Unknown error"}" });
+        }
+
+        // Get user info from properties (set in OnTicketReceived event)
+        var userId = result.Properties?.Items?.GetValueOrDefault("UserId");
+        var userEmail = result.Properties?.Items?.GetValueOrDefault("UserEmail");
+        var userName = result.Properties?.Items?.GetValueOrDefault("UserName");
+
+        if (string.IsNullOrEmpty(userId))
         {
-            // Check if user is authenticated with Google scheme
-            if (User.Identity?.IsAuthenticated == true && User.Identity.AuthenticationType == "Google")
+            // Fallback: try to get from claims
+            var claims = result.Principal?.Claims;
+            if (claims != null)
             {
-                claims = User.Claims;
-            }
-            else
-            {
-                // Try to authenticate again
-                result = await HttpContext.AuthenticateAsync("Google");
-                if (!result.Succeeded)
+                var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
+                var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
+                var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
+
+                if (!string.IsNullOrEmpty(googleSub) && !string.IsNullOrEmpty(email))
                 {
-                    // Return debug information in the error
-                    var errorDetails = $"Auth failed. Debug: Succeeded={authDebug.Succeeded}, Failure={authDebug.FailureMessage}, UserAuth={debugInfo.UserAuthenticated}, UserType={debugInfo.UserAuthType}, UserClaims={debugInfo.UserClaimsCount}";
-                    return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {errorDetails}" });
+                    var user = await _userService.UpsertGoogleUserAsync(googleSub, email, name);
+                    userId = user.Id.ToString();
+                    userEmail = user.Email;
+                    userName = user.FullName ?? user.Email;
                 }
-                claims = result.Principal?.Claims;
             }
         }
 
-        if (claims == null)
+        if (string.IsNullOrEmpty(userId))
         {
-            return RedirectToAction("Login", new { error = "No claims received from Google" });
+            return RedirectToAction("Login", new { error = "Unable to retrieve user information" });
         }
-
-        // Extract Google claims (Google returns raw JSON keys: "sub", "email", "name")
-        var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-        var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
-        var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
-
-        if (string.IsNullOrEmpty(googleSub) || string.IsNullOrEmpty(email))
-        {
-            return RedirectToAction("Login", new { error = "Missing required Google claims" });
-        }
-
-        // Upsert user in database
-        var user = await _userService.UpsertGoogleUserAsync(googleSub, email, name);
 
         // Create local claims for cookie authentication
         var localClaims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.FullName ?? user.Email)
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim(ClaimTypes.Email, userEmail ?? ""),
+            new Claim(ClaimTypes.Name, userName ?? userEmail ?? "")
         };
 
         var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -149,10 +123,14 @@ public class AccountController : Controller
             ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
         };
 
+        // Sign in with cookies
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(claimsIdentity),
             authProperties);
+
+        // Sign out from Google scheme (cleanup)
+        await HttpContext.SignOutAsync("Google");
 
         return RedirectToAction("Index", "StudyChat");
     }

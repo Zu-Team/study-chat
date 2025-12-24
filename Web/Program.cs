@@ -267,6 +267,7 @@ startupLogger.LogInformation("Google OAuth: CONFIGURED");
 // This project currently has no EF Core migrations committed. In that case, a fresh database will not
 // have the required tables (users/chats/messages/...) and the StudyChat page will crash with a 500.
 // EnsureCreated() will create the schema from the current model if it doesn't exist.
+// NOTE: This is intentionally a "safe default" for new deployments until proper migrations are added.
 try
 {
     using var scope = app.Services.CreateScope();

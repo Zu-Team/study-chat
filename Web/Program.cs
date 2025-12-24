@@ -79,9 +79,9 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = clientId ?? string.Empty;
     options.ClientSecret = clientSecret ?? string.Empty;
     
-    // Custom callback path (must match in Google Cloud Console)
-    // For Azure: https://studychat.azurewebsites.net/Account/GoogleCallback
-    options.CallbackPath = "/Account/GoogleCallback";
+    // Callback path (must match Google Cloud Console: /signin-google)
+    // Google Cloud Console: https://studychat-bcd3a5hmgqcvgvam.francecentral-01.azurewebsites.net/signin-google
+    options.CallbackPath = "/signin-google";
     options.SaveTokens = true;
     
     // Request additional scopes

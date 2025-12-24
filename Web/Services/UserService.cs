@@ -19,9 +19,11 @@ public class UserService
         var now = DateTimeOffset.UtcNow;
         User? user = null;
 
-        // 1. Try to find by google_sub
-        user = await _context.Users
-            .FirstOrDefaultAsync(u => u.GoogleSub == googleSub);
+        try
+        {
+            // 1. Try to find by google_sub
+            user = await _context.Users
+                .FirstOrDefaultAsync(u => u.GoogleSub == googleSub);
 
         if (user != null)
         {

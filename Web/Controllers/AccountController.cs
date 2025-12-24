@@ -82,7 +82,8 @@ public class AccountController : Controller
             return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {result.Failure?.Message ?? "Unknown error"}" });
         }
 
-        // Get user info from properties (set in OnTicketReceived event)
+        // The user should already be signed in from OnTicketReceived
+        // But if not, try to get user info from properties or claims
         string? userId = null;
         string? userEmail = null;
         string? userName = null;
@@ -94,7 +95,7 @@ public class AccountController : Controller
             result.Properties.Items.TryGetValue("UserName", out userName);
         }
 
-        // If properties are not available, try to get from claims
+        // If properties are not available, try to get from claims and upsert user
         if (string.IsNullOrEmpty(userId))
         {
             var claims = result.Principal?.Claims;
@@ -110,39 +111,34 @@ public class AccountController : Controller
                     userId = user.Id.ToString();
                     userEmail = user.Email;
                     userName = user.FullName ?? user.Email;
+
+                    // Sign in with cookies if not already signed in
+                    var localClaims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, userId),
+                        new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
+                        new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
+                    };
+
+                    var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
+                    var authProperties = new AuthenticationProperties
+                    {
+                        IsPersistent = true,
+                        ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+                    };
+
+                    await HttpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme,
+                        new ClaimsPrincipal(claimsIdentity),
+                        authProperties);
                 }
             }
         }
 
-        if (string.IsNullOrEmpty(userId))
-        {
-            return RedirectToAction("Login", new { error = "Unable to retrieve user information" });
-        }
-
-        // Create local claims for cookie authentication
-        var localClaims = new List<Claim>
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
-            new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
-        };
-
-        var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-        };
-
-        // Sign in with cookies
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(claimsIdentity),
-            authProperties);
-
         // Sign out from Google scheme (cleanup)
         await HttpContext.SignOutAsync("Google");
 
+        // Redirect to StudyChat
         return RedirectToAction("Index", "StudyChat");
     }
 

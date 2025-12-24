@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Web.Data;
 using Web.Services;
 
@@ -36,7 +37,45 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 
-// Authentication configuration
+// ============================================
+// STARTUP CONFIGURATION VALIDATION
+// ============================================
+// Validate required configuration (without logging secrets)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var googleClientId = builder.Configuration["Google:ClientId"];
+var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+
+var missingConfig = new List<string>();
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    missingConfig.Add("ConnectionStrings:DefaultConnection (Azure: ConnectionStrings__DefaultConnection)");
+}
+if (string.IsNullOrWhiteSpace(googleClientId))
+{
+    missingConfig.Add("Google:ClientId (Azure: Google__ClientId)");
+}
+if (string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    missingConfig.Add("Google:ClientSecret (Azure: Google__ClientSecret)");
+}
+
+if (missingConfig.Any())
+{
+    var errorMessage = $"CRITICAL: Missing required configuration values:\n" +
+                       string.Join("\n", missingConfig.Select(c => $"  - {c}")) +
+                       "\n\nPlease configure these in Azure App Settings or User Secrets.";
+    Console.Error.WriteLine(errorMessage);
+    throw new InvalidOperationException(errorMessage);
+}
+
+// Log validation success (without secrets) - will be logged when app starts
+Console.WriteLine("[Startup] Configuration validation passed. All required settings are present.");
+Console.WriteLine("[Startup] Database connection: CONFIGURED");
+Console.WriteLine("[Startup] Google OAuth: CONFIGURED");
+
+// ============================================
+// AUTHENTICATION CONFIGURATION
+// ============================================
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -49,24 +88,22 @@ builder.Services.AddAuthentication(options =>
     options.AccessDeniedPath = "/Account/Login";
     options.ExpireTimeSpan = TimeSpan.FromDays(30);
     options.SlidingExpiration = true;
+    
+    // Cookie security settings for production
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Requires HTTPS
+    options.Cookie.SameSite = SameSiteMode.Lax; // Allows OAuth redirects
 })
 .AddGoogle("Google", options =>
 {
     // Read from configuration (Azure App Settings: Google__ClientId, Google__ClientSecret)
     // Or User Secrets (Development): Google:ClientId, Google:ClientSecret
-    var clientId = builder.Configuration["Google:ClientId"];
-    var clientSecret = builder.Configuration["Google:ClientSecret"];
-
-    if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
-    {
-        throw new InvalidOperationException(
-            "Google OAuth credentials not configured. " +
-            "Please set Google:ClientId and Google:ClientSecret in Azure App Settings " +
-            "(as Google__ClientId and Google__ClientSecret) or User Secrets.");
-    }
-
-    options.ClientId = clientId;
-    options.ClientSecret = clientSecret;
+    // Note: Configuration is already validated above
+    options.ClientId = googleClientId!;
+    options.ClientSecret = googleClientSecret!;
+    
+    // Custom callback path (must match in Google Cloud Console)
+    // For Azure: https://studychat.azurewebsites.net/Account/GoogleCallback
     options.CallbackPath = "/Account/GoogleCallback";
     options.SaveTokens = true;
     

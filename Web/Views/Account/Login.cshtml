@@ -8,6 +8,13 @@
         <h1 class="auth-title">Welcome Back</h1>
         <p class="auth-subtitle">Sign in to your account to continue</p>
         
+        @if (!string.IsNullOrEmpty(ViewContext.HttpContext.Request.Query["error"]))
+        {
+            <div class="alert alert-danger" role="alert">
+                @ViewContext.HttpContext.Request.Query["error"]
+            </div>
+        }
+        
         <form asp-action="Login" method="post">
             @if (!ViewData.ModelState.IsValid)
             {

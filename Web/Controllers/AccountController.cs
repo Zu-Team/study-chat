@@ -80,9 +80,16 @@ public class AccountController : Controller
         }
 
         // Get user info from properties (set in OnTicketReceived event)
-        result.Properties?.Items?.TryGetValue("UserId", out var userId);
-        result.Properties?.Items?.TryGetValue("UserEmail", out var userEmail);
-        result.Properties?.Items?.TryGetValue("UserName", out var userName);
+        string? userId = null;
+        string? userEmail = null;
+        string? userName = null;
+        
+        if (result.Properties?.Items != null)
+        {
+            result.Properties.Items.TryGetValue("UserId", out userId);
+            result.Properties.Items.TryGetValue("UserEmail", out userEmail);
+            result.Properties.Items.TryGetValue("UserName", out userName);
+        }
 
         if (string.IsNullOrEmpty(userId))
         {

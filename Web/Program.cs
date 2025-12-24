@@ -158,18 +158,22 @@ builder.Services.AddAuthentication(options =>
             };
 
             var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
             
-            // Sign in with cookies directly
+            // Replace the principal in the context so the authentication middleware recognizes the user
+            context.Principal = claimsPrincipal;
+            
+            // Sign in with cookies
             await context.HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(claimsIdentity),
+                claimsPrincipal,
                 new AuthenticationProperties
                 {
                     IsPersistent = true,
                     ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
                 });
             
-            // Set redirect URI to StudyChat (user is already signed in)
+            // Set redirect URI to StudyChat
             context.Properties.RedirectUri = "/StudyChat";
             
             logger.LogInformation("Google authentication successful for user: {Email}, UserId: {UserId}", email, user.Id);

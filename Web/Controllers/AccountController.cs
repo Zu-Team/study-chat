@@ -78,10 +78,10 @@ public class AccountController : Controller
             return RedirectToAction("Login", new { error = "No claims received from Google" });
         }
 
-        // Extract Google claims
-        var googleSub = claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-        var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-        var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+        // Extract Google claims (Google returns raw JSON keys: "sub", "email", "name")
+        var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
+        var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
+        var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
 
         if (string.IsNullOrEmpty(googleSub) || string.IsNullOrEmpty(email))
         {

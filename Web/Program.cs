@@ -88,11 +88,11 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("email");
     options.Scope.Add("profile");
     
-    // Map Google claims to standard claim types
-    options.ClaimActions.MapJsonClaim(ClaimTypes.NameIdentifier, "sub");
-    options.ClaimActions.MapJsonClaim(ClaimTypes.Email, "email");
-    options.ClaimActions.MapJsonClaim(ClaimTypes.Name, "name");
-    options.ClaimActions.MapJsonClaim("picture", "picture");
+    // Note: In .NET 9.0, Google OAuth automatically maps standard claims:
+    // - "sub" -> ClaimTypes.NameIdentifier
+    // - "email" -> ClaimTypes.Email  
+    // - "name" -> ClaimTypes.Name
+    // Additional claims like "picture" can be accessed directly in the callback handler
 });
 
 var app = builder.Build();

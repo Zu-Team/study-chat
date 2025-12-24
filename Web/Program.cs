@@ -173,10 +173,12 @@ builder.Services.AddAuthentication(options =>
                     ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
                 });
             
-            // Set redirect URI directly to StudyChat since user is already signed in
-            context.Properties.RedirectUri = "/StudyChat";
+            // Mark the ticket as handled and redirect directly to StudyChat
+            context.HandleCodeRedemption();
+            context.Response.Redirect("/StudyChat");
+            context.Result = Microsoft.AspNetCore.Authentication.AuthenticateResult.Success(claimsPrincipal);
             
-            logger.LogInformation("Google authentication successful for user: {Email}, UserId: {UserId}", email, user.Id);
+            logger.LogInformation("Google authentication successful and redirected to /StudyChat for user: {Email}, UserId: {UserId}", email, user.Id);
         }
         catch (Exception ex)
         {

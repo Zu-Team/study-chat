@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Web.Data;
 using Web.Models;
 using Web.Services;
@@ -102,6 +103,22 @@ builder.Services.AddAuthentication(options =>
         // This event fires when Google authentication succeeds
         // We'll handle user creation and cookie sign-in here
         // The RedirectUri will be used after this event completes
+    };
+
+    // Handle remote auth failures (correlation/state/config issues, user denied consent, etc.)
+    options.Events.OnRemoteFailure = context =>
+    {
+        var serviceProvider = context.HttpContext.RequestServices;
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var traceId = context.HttpContext.TraceIdentifier;
+
+        logger.LogError(context.Failure, "Google remote authentication failed. TraceId={TraceId}", traceId);
+
+        var msg = context.Failure?.Message ?? "Google authentication failed";
+        var redirect = $"/Account/Login?error={Uri.EscapeDataString($"{msg} (Ref: {traceId})")}";
+        context.Response.Redirect(redirect);
+        context.HandleResponse();
+        return Task.CompletedTask;
     };
     
     // Handle after ticket is created - this is where we process the user
@@ -240,6 +257,12 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
+// Ensure correct scheme/host behind Azure reverse proxy
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+});
 
 app.UseHttpsRedirection();
 app.UseRouting();

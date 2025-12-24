@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Web.Services;
 
@@ -12,10 +13,14 @@ namespace Web.Controllers;
 public class AccountController : Controller
 {
     private readonly UserService _userService;
+    private readonly ILogger<AccountController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public AccountController(UserService userService)
+    public AccountController(UserService userService, ILogger<AccountController> logger, IConfiguration configuration)
     {
         _userService = userService;
+        _logger = logger;
+        _configuration = configuration;
     }
 
     public IActionResult Login()
@@ -68,83 +73,78 @@ public class AccountController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
-        // Check if user is already authenticated (from OnTicketReceived event)
-        if (User.Identity?.IsAuthenticated == true && User.Identity.AuthenticationType == CookieAuthenticationDefaults.AuthenticationScheme)
-        {
-            // User is already signed in, redirect to StudyChat
-            return RedirectToAction("Index", "StudyChat");
-        }
+        var traceId = HttpContext.TraceIdentifier;
+        var debugAuthEnabled = string.Equals(_configuration["Debug:Auth"], "true", StringComparison.OrdinalIgnoreCase);
 
-        // Try to get the Google authentication result
-        var result = await HttpContext.AuthenticateAsync("Google");
-        
-        if (!result.Succeeded)
+        try
         {
-            var errorMsg = result.Failure?.Message ?? "Unknown error";
-            // Log the error for debugging
-            var logger = HttpContext.RequestServices.GetRequiredService<ILogger<AccountController>>();
-            logger.LogError("Google authentication failed in GoogleCallback: {Error}", errorMsg);
-            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {errorMsg}" });
-        }
-
-        // The user should already be signed in from OnTicketReceived
-        // But if not, try to get user info from properties or claims
-        string? userId = null;
-        string? userEmail = null;
-        string? userName = null;
-        
-        if (result.Properties?.Items != null)
-        {
-            result.Properties.Items.TryGetValue("UserId", out userId);
-            result.Properties.Items.TryGetValue("UserEmail", out userEmail);
-            result.Properties.Items.TryGetValue("UserName", out userName);
-        }
-
-        // If properties are not available, try to get from claims and upsert user
-        if (string.IsNullOrEmpty(userId))
-        {
-            var claims = result.Principal?.Claims;
-            if (claims != null)
+            // In this app, the Google handler signs in the cookie during OnTicketReceived.
+            // So this endpoint should usually just observe the cookie-authenticated user and redirect.
+            if (User.Identity?.IsAuthenticated == true)
             {
-                var googleSub = claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
-                var email = claims.FirstOrDefault(c => c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
-                var name = claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
-
-                if (!string.IsNullOrEmpty(googleSub) && !string.IsNullOrEmpty(email))
-                {
-                    var user = await _userService.UpsertGoogleUserAsync(googleSub, email, name);
-                    userId = user.Id.ToString();
-                    userEmail = user.Email;
-                    userName = user.FullName ?? user.Email;
-
-                    // Sign in with cookies if not already signed in
-                    var localClaims = new List<Claim>
-                    {
-                        new Claim(ClaimTypes.NameIdentifier, userId),
-                        new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
-                        new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
-                    };
-
-                    var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);
-                    var authProperties = new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-                    };
-
-                    await HttpContext.SignInAsync(
-                        CookieAuthenticationDefaults.AuthenticationScheme,
-                        new ClaimsPrincipal(claimsIdentity),
-                        authProperties);
-                }
+                return RedirectToAction("Index", "StudyChat");
             }
+
+            // If for some reason the principal isn't populated yet, explicitly authenticate the cookie scheme.
+            var cookieResult = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            if (cookieResult.Succeeded && cookieResult.Principal != null)
+            {
+                HttpContext.User = cookieResult.Principal;
+                return RedirectToAction("Index", "StudyChat");
+            }
+
+            _logger.LogWarning(
+                "GoogleCallback reached without an authenticated cookie user. TraceId={TraceId}, Failure={Failure}",
+                traceId,
+                cookieResult.Failure?.Message);
+
+            if (debugAuthEnabled)
+            {
+                return StatusCode(401, new
+                {
+                    message = "Not authenticated after Google sign-in. The cookie principal was not established.",
+                    traceId,
+                    cookieAuth = new
+                    {
+                        succeeded = cookieResult.Succeeded,
+                        failure = cookieResult.Failure?.Message
+                    },
+                    request = new
+                    {
+                        method = Request.Method,
+                        scheme = Request.Scheme,
+                        host = Request.Host.Value,
+                        path = Request.Path.Value,
+                        queryString = Request.QueryString.Value
+                    }
+                });
+            }
+
+            return RedirectToAction("Login", "Account",
+                new { error = $"Google sign-in failed to establish a session. Ref: {traceId}" });
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in GoogleCallback. TraceId={TraceId}", traceId);
 
-        // Sign out from Google scheme (cleanup)
-        await HttpContext.SignOutAsync("Google");
+            if (debugAuthEnabled)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Unhandled exception in /Account/GoogleCallback (enable Debug:Auth only temporarily).",
+                    traceId,
+                    exception = new
+                    {
+                        type = ex.GetType().FullName,
+                        ex.Message,
+                        stackTrace = ex.StackTrace
+                    }
+                });
+            }
 
-        // Redirect to StudyChat
-        return RedirectToAction("Index", "StudyChat");
+            return RedirectToAction("Login", "Account",
+                new { error = $"Google sign-in crashed on the server. Ref: {traceId}" });
+        }
     }
 
     public async Task<IActionResult> Logout()

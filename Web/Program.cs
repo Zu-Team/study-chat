@@ -99,6 +99,7 @@ builder.Services.AddAuthentication(options =>
     // Google Cloud Console: https://studychat-bcd3a5hmgqcvgvam.francecentral-01.azurewebsites.net/signin-google
     options.CallbackPath = "/signin-google";
     options.SaveTokens = true;
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     
     // Request additional scopes
     options.Scope.Add("email");
@@ -182,6 +183,7 @@ builder.Services.AddAuthentication(options =>
             // Create local claims for cookie authentication
             var localClaims = new List<Claim>
             {
+                new Claim("studychat_user_id", user.Id.ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
                 new Claim(ClaimTypes.Name, user.FullName ?? user.Email ?? string.Empty)
@@ -193,18 +195,10 @@ builder.Services.AddAuthentication(options =>
             // Replace the principal in the context so the authentication middleware recognizes the user
             context.Principal = claimsPrincipal;
             
-            // Sign in with cookies - ensure this happens before any redirect
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
-                AllowRefresh = true
-            };
-            
-            await context.HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            // Let the Google handler issue the cookie using our principal + properties.
+            context.Properties.IsPersistent = true;
+            context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+            context.Properties.AllowRefresh = true;
             
             // Ensure we always land on StudyChat after a successful Google sign-in
             // (some deployments can lose/clear the original RedirectUri and fall back to "/").
@@ -278,7 +272,12 @@ if (!app.Environment.IsDevelopment())
 // Ensure correct scheme/host behind Azure reverse proxy
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+    // Azure App Service uses internal proxies (not loopback), so we must trust forwarded headers explicitly.
+    // See: https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer
+    ForwardLimit = null,
+    KnownNetworks = { },
+    KnownProxies = { }
 });
 
 app.UseHttpsRedirection();

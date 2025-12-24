@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Web.Services;
 
 namespace Web.Controllers
@@ -62,6 +63,14 @@ namespace Web.Controllers
             {
                 var chats = await _chatService.GetChatsForUserAsync(userId.Value);
                 ViewBag.Chats = chats;
+            }
+            catch (PostgresException pgEx) when (pgEx.SqlState == "42P01")
+            {
+                // 42P01 = undefined_table (e.g., relation "chats" does not exist)
+                var traceId = HttpContext.TraceIdentifier;
+                _logger.LogError(pgEx, "Database schema missing (undefined_table). TraceId={TraceId}. Hint={Hint}", traceId, pgEx.MessageText);
+                ViewBag.ErrorMessage = $"Database tables are not initialized yet (missing table). Ref: {traceId}";
+                ViewBag.Chats = new List<Models.Chat>();
             }
             catch (Exception ex)
             {

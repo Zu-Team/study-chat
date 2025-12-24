@@ -119,6 +119,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
     color: #b0b0b0;
+    text-decoration: none;
 }
 
 .chat-item:hover {

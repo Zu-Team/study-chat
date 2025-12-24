@@ -44,13 +44,8 @@ public class AccountController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Register(string fullName, string email, string password, bool agreeTerms)
+    public async Task<IActionResult> Register(string fullName, string email, string password)
     {
-        if (!agreeTerms)
-        {
-            ModelState.AddModelError(string.Empty, "You must agree to the Terms and Conditions.");
-        }
-
         if (string.IsNullOrWhiteSpace(fullName))
         {
             ModelState.AddModelError(nameof(fullName), "Full name is required.");

@@ -119,6 +119,13 @@ builder.Services.AddAuthentication(options =>
         // The RedirectUri will be used after this event completes
     };
 
+    // Harden correlation cookie behavior for modern browsers + reverse proxies.
+    // If the app thinks requests are HTTP (misconfigured forwarded headers), SameSite=None cookies without Secure
+    // will be rejected by browsers, causing "Correlation failed".
+    options.CorrelationCookie.SameSite = SameSiteMode.None;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.CorrelationCookie.HttpOnly = true;
+
     // Handle remote auth failures (correlation/state/config issues, user denied consent, etc.)
     options.Events.OnRemoteFailure = context =>
     {
@@ -290,15 +297,18 @@ if (!app.Environment.IsDevelopment())
 }
 
 // Ensure correct scheme/host behind Azure reverse proxy
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// IMPORTANT: Azure App Service is a reverse proxy. If we don't correctly process X-Forwarded-* headers,
+// the app will think requests are HTTP (not HTTPS), which can break OAuth correlation cookies and auth flows.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
-    // Azure App Service uses internal proxies (not loopback), so we must trust forwarded headers explicitly.
-    // See: https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer
+    // Azure can chain proxies; don't artificially limit forwarded header processing.
     ForwardLimit = null,
-    KnownNetworks = { },
-    KnownProxies = { }
-});
+};
+// Clear the default "trust only loopback proxies" restriction so Azure's proxy headers are honored.
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseHttpsRedirection();
 app.UseRouting();

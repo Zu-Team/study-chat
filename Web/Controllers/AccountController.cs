@@ -65,19 +65,16 @@ public class AccountController : Controller
 
     public IActionResult GoogleLogin()
     {
-        // Default to StudyChat after Google auth. If a ReturnUrl is present (e.g., user tried to open a protected page),
-        // we carry it through as long as it's a local URL.
+        // Always return to GoogleCallback after the remote login completes.
+        // This gives us a single place to verify the cookie user exists and then redirect to the final page.
         var returnUrl = Request.Query["returnUrl"].ToString();
-        if (string.IsNullOrWhiteSpace(returnUrl))
-        {
-            returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
-        }
-        else if (!Url.IsLocalUrl(returnUrl))
+        if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
         {
             returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
         }
 
-        var properties = new AuthenticationProperties { RedirectUri = returnUrl };
+        var redirectUri = Url.Action("GoogleCallback", "Account", new { returnUrl }) ?? "/Account/GoogleCallback";
+        var properties = new AuthenticationProperties { RedirectUri = redirectUri };
         return Challenge(properties, "Google");
     }
 
@@ -91,9 +88,15 @@ public class AccountController : Controller
         {
             // In this app, the Google handler signs in the cookie during OnTicketReceived.
             // So this endpoint should usually just observe the cookie-authenticated user and redirect.
+            var returnUrl = Request.Query["returnUrl"].ToString();
+            if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
+            {
+                returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
+            }
+
             if (User.Identity?.IsAuthenticated == true)
             {
-                return RedirectToAction("Index", "StudyChat");
+                return LocalRedirect(returnUrl);
             }
 
             // If for some reason the principal isn't populated yet, explicitly authenticate the cookie scheme.
@@ -101,7 +104,7 @@ public class AccountController : Controller
             if (cookieResult.Succeeded && cookieResult.Principal != null)
             {
                 HttpContext.User = cookieResult.Principal;
-                return RedirectToAction("Index", "StudyChat");
+                return LocalRedirect(returnUrl);
             }
 
             _logger.LogWarning(

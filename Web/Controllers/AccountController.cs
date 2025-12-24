@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -79,9 +80,9 @@ public class AccountController : Controller
         }
 
         // Get user info from properties (set in OnTicketReceived event)
-        var userId = result.Properties?.Items?.GetValueOrDefault("UserId");
-        var userEmail = result.Properties?.Items?.GetValueOrDefault("UserEmail");
-        var userName = result.Properties?.Items?.GetValueOrDefault("UserName");
+        result.Properties?.Items?.TryGetValue("UserId", out var userId);
+        result.Properties?.Items?.TryGetValue("UserEmail", out var userEmail);
+        result.Properties?.Items?.TryGetValue("UserName", out var userName);
 
         if (string.IsNullOrEmpty(userId))
         {
@@ -111,9 +112,9 @@ public class AccountController : Controller
         // Create local claims for cookie authentication
         var localClaims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Email, userEmail ?? ""),
-            new Claim(ClaimTypes.Name, userName ?? userEmail ?? "")
+            new Claim(ClaimTypes.NameIdentifier, userId ?? string.Empty),
+            new Claim(ClaimTypes.Email, userEmail ?? string.Empty),
+            new Claim(ClaimTypes.Name, userName ?? userEmail ?? string.Empty)
         };
 
         var claimsIdentity = new ClaimsIdentity(localClaims, CookieAuthenticationDefaults.AuthenticationScheme);

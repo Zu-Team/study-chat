@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Web.Data;
+using Web.Models;
 using Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -150,8 +151,8 @@ builder.Services.AddAuthentication(options =>
 
             // Store user ID in properties so we can use it in the callback
             context.Properties.Items["UserId"] = user.Id.ToString();
-            context.Properties.Items["UserEmail"] = user.Email;
-            context.Properties.Items["UserName"] = user.FullName ?? user.Email;
+            context.Properties.Items["UserEmail"] = user.Email ?? string.Empty;
+            context.Properties.Items["UserName"] = user.FullName ?? user.Email ?? string.Empty;
             
             // Set redirect URI to our callback handler
             context.Properties.RedirectUri = "/Account/GoogleCallback";

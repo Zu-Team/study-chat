@@ -140,5 +140,12 @@ public class UserService
         return await _context.Users
             .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
     }
+
+    public async Task UpdateLastLoginAsync(User user)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
+    }
 }
 

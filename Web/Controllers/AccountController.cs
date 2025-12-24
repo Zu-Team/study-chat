@@ -2,6 +2,7 @@ using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -30,11 +31,98 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    public IActionResult Login(string email, string password)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Login(string email, string password, bool rememberMe = false, string? returnUrl = null)
     {
-        // TODO: Implement local authentication logic
-        // For now, this is just a placeholder
-        return RedirectToAction("Index", "StudyChat");
+        var traceId = HttpContext.TraceIdentifier;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            ModelState.AddModelError(nameof(email), "Email is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            ModelState.AddModelError(nameof(password), "Password is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View();
+        }
+
+        // Prefer explicit param, otherwise honor common ReturnUrl query param.
+        returnUrl ??= Request.Query["ReturnUrl"].ToString();
+        if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
+        {
+            returnUrl = Url.Action("Index", "StudyChat") ?? "/StudyChat/Index";
+        }
+
+        try
+        {
+            var normalizedEmail = email.Trim();
+            var user = await _userService.GetUserByEmailAsync(normalizedEmail);
+
+            // Avoid user enumeration: use same message for "not found" and "wrong password".
+            if (user == null)
+            {
+                ModelState.AddModelError(string.Empty, "Invalid email or password.");
+                return View();
+            }
+
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                ModelState.AddModelError(string.Empty, "This account does not have a local password. Please use Google sign-in.");
+                return View();
+            }
+
+            var hasher = new PasswordHasher<Web.Models.User>();
+            var result = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            if (result == PasswordVerificationResult.Failed)
+            {
+                ModelState.AddModelError(string.Empty, "Invalid email or password.");
+                return View();
+            }
+
+            // Rehash if needed (e.g., algorithm/work factor changed).
+            if (result == PasswordVerificationResult.SuccessRehashNeeded)
+            {
+                user.PasswordHash = hasher.HashPassword(user, password);
+            }
+
+            await _userService.UpdateLastLoginAsync(user);
+
+            var claims = new List<Claim>
+            {
+                new Claim("studychat_user_id", user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.FullName ?? user.Email ?? string.Empty)
+            };
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = new ClaimsPrincipal(identity);
+
+            var props = new AuthenticationProperties
+            {
+                IsPersistent = rememberMe,
+                AllowRefresh = true
+            };
+
+            if (rememberMe)
+            {
+                props.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+            }
+
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, props);
+            return LocalRedirect(returnUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Local login failed unexpectedly. TraceId={TraceId}, Email={Email}", traceId, email);
+            ModelState.AddModelError(string.Empty, $"Unexpected server error while logging in. Ref: {traceId}");
+            return View();
+        }
     }
 
     public IActionResult Register()

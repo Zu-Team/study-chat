@@ -207,13 +207,13 @@ builder.Services.AddAuthentication(options =>
             context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
             context.Properties.AllowRefresh = true;
             
-            // Ensure we always land on StudyChat after a successful Google sign-in
-            // (some deployments can lose/clear the original RedirectUri and fall back to "/").
-            context.ReturnUri = "/StudyChat/Index";
-
-            // Don't override RedirectUri - let it use the one from challenge (/Account/GoogleCallback)
-            // The cookie is now set, so when GoogleCallback is reached, the user will be authenticated
-            logger.LogInformation("Google authentication successful, user signed in with cookies. Email: {Email}, UserId: {UserId}. Redirecting to GoogleCallback.", email, user.Id);
+            // Don't force a return path here. We honor the RedirectUri set in /Account/GoogleLogin,
+            // which routes through /Account/GoogleCallback (and preserves any returnUrl).
+            logger.LogInformation(
+                "Google authentication successful; upserted user and established cookie principal. Email={Email}, UserId={UserId}, RedirectUri={RedirectUri}",
+                email,
+                user.Id,
+                context.Properties?.RedirectUri);
         }
         catch (Exception ex)
         {

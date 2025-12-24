@@ -163,20 +163,22 @@ builder.Services.AddAuthentication(options =>
             // Replace the principal in the context so the authentication middleware recognizes the user
             context.Principal = claimsPrincipal;
             
-            // Sign in with cookies
+            // Sign in with cookies - ensure this happens before any redirect
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+                AllowRefresh = true
+            };
+            
             await context.HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 claimsPrincipal,
-                new AuthenticationProperties
-                {
-                    IsPersistent = true,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-                });
+                authProperties);
             
-            // Set the redirect URI - the OAuth middleware will handle the redirect
-            context.Properties.RedirectUri = "/StudyChat";
-            
-            logger.LogInformation("Google authentication successful, redirecting to /StudyChat for user: {Email}, UserId: {UserId}", email, user.Id);
+            // Don't override RedirectUri - let it use the one from challenge (/Account/GoogleCallback)
+            // The cookie is now set, so when GoogleCallback is reached, the user will be authenticated
+            logger.LogInformation("Google authentication successful, user signed in with cookies. Email: {Email}, UserId: {UserId}. Redirecting to GoogleCallback.", email, user.Id);
         }
         catch (Exception ex)
         {

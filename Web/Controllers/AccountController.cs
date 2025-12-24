@@ -59,9 +59,9 @@ public class AccountController : Controller
 
     public IActionResult GoogleLogin()
     {
-        // RedirectUri will be set in OnTicketReceived event after user is signed in
-        // This allows us to sign in the user and redirect to StudyChat in one step
-        return Challenge(new AuthenticationProperties(), "Google");
+        // Set the redirect URI so after Google auth, we go to GoogleCallback which will redirect to StudyChat
+        var properties = new AuthenticationProperties { RedirectUri = "/Account/GoogleCallback" };
+        return Challenge(properties, "Google");
     }
 
     [AllowAnonymous]

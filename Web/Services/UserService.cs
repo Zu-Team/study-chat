@@ -129,6 +129,43 @@ public class UserService
         }
     }
 
+    public async Task<bool> CreateGoogleUserIfNotExistsAsync(string googleSub, string email, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(googleSub)) throw new ArgumentException("googleSub is required.", nameof(googleSub));
+        if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("email is required.", nameof(email));
+
+        var now = DateTimeOffset.UtcNow;
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+            Email = email.Trim(),
+            GoogleSub = googleSub.Trim(),
+            AuthProvider = "google",
+            EmailVerified = true,
+            IsActive = true,
+            CreatedAt = now,
+            LastLoginAt = now
+        };
+
+        try
+        {
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx)
+        {
+            // 23505 = unique_violation (email/google_sub already exists)
+            if (string.Equals(pgEx.SqlState, PostgresErrorCodes.UniqueViolation, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            throw;
+        }
+    }
+
     public async Task<User?> GetUserByIdAsync(Guid userId)
     {
         return await _context.Users

@@ -29,14 +29,17 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
       working-directory: ./Web
+      continue-on-error: false
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build --configuration Release --no-restore --verbosity normal
       working-directory: ./Web
+      continue-on-error: false
 
     - name: Publish
-      run: dotnet publish --configuration Release --output ./publish
+      run: dotnet publish --configuration Release --output ./publish --verbosity normal
       working-directory: ./Web
+      continue-on-error: false
 
     - name: Login to Azure
       uses: azure/login@v2

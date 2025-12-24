@@ -16,8 +16,14 @@ builder.Services.AddControllersWithViews();
 // 1. Environment variable: ConnectionStrings__DefaultConnection (highest priority - Azure App Settings)
 // 2. User Secrets (Development only): ConnectionStrings:DefaultConnection
 // 3. appsettings.json: ConnectionStrings:DefaultConnection (lowest priority, not recommended for secrets)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    // Use placeholder during build if connection string is not available
+    // This allows the app to build without secrets present
+    var connString = connectionString ?? "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
+    options.UseNpgsql(connString);
+});
 
 // MIGRATION INSTRUCTIONS (run these commands in the Web directory):
 // 1. Create initial migration:

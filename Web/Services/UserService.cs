@@ -1,6 +1,7 @@
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Npgsql;
 using Web.Data;
 using Web.Models;
 
@@ -21,12 +22,6 @@ public class UserService
         if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password is required.", nameof(password));
 
         var normalizedEmail = email.Trim();
-        var existing = await _context.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
-        if (existing != null)
-        {
-            throw new InvalidOperationException("A user with this email already exists.");
-        }
-
         var now = DateTimeOffset.UtcNow;
         var user = new User
         {
@@ -44,9 +39,29 @@ public class UserService
         var hasher = new PasswordHasher<User>();
         user.PasswordHash = hasher.HashPassword(user, password);
 
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
-        return user;
+        try
+        {
+            // Avoid a pre-check SELECT: some deployments enforce restrictive SELECT/RLS policies.
+            // Instead, rely on the unique index on email and translate unique-violation into a friendly message.
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            return user;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx)
+        {
+            // 23505 = unique_violation
+            if (string.Equals(pgEx.SqlState, PostgresErrorCodes.UniqueViolation, StringComparison.Ordinal))
+            {
+                // Best-effort mapping: constraint names vary across environments.
+                if ((pgEx.ConstraintName?.Contains("email", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (pgEx.Detail?.Contains("email", StringComparison.OrdinalIgnoreCase) ?? false))
+                {
+                    throw new InvalidOperationException("A user with this email already exists.", ex);
+                }
+            }
+
+            throw;
+        }
     }
 
     public async Task<User> UpsertGoogleUserAsync(string googleSub, string email, string? name)

@@ -46,6 +46,8 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Register(string fullName, string email, string password)
     {
+        var traceId = HttpContext.TraceIdentifier;
+
         if (string.IsNullOrWhiteSpace(fullName))
         {
             ModelState.AddModelError(nameof(fullName), "Full name is required.");
@@ -82,14 +84,16 @@ public class AccountController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
             return View();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-            ModelState.AddModelError(string.Empty, "Database error while creating the account. Please verify the connection string and schema.");
+            _logger.LogError(ex, "Database error while creating local account. TraceId={TraceId}, Email={Email}", traceId, email);
+            ModelState.AddModelError(string.Empty, $"Database error while creating the account. Ref: {traceId}");
             return View();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, "Unexpected server error while creating the account.");
+            _logger.LogError(ex, "Unexpected error while creating local account. TraceId={TraceId}, Email={Email}", traceId, email);
+            ModelState.AddModelError(string.Empty, $"Unexpected server error while creating the account. Ref: {traceId}");
             return View();
         }
     }

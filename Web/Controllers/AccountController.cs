@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Web.Services;
 
 namespace Web.Controllers;
@@ -79,7 +80,11 @@ public class AccountController : Controller
         
         if (!result.Succeeded)
         {
-            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {result.Failure?.Message ?? "Unknown error"}" });
+            var errorMsg = result.Failure?.Message ?? "Unknown error";
+            // Log the error for debugging
+            var logger = HttpContext.RequestServices.GetRequiredService<ILogger<AccountController>>();
+            logger.LogError("Google authentication failed in GoogleCallback: {Error}", errorMsg);
+            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {errorMsg}" });
         }
 
         // The user should already be signed in from OnTicketReceived

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Web.Services;
 
@@ -64,12 +65,15 @@ public class AccountController : Controller
         return Challenge(properties, "Google");
     }
 
+    [AllowAnonymous]
     public async Task<IActionResult> GoogleCallback()
     {
         var result = await HttpContext.AuthenticateAsync("Google");
         if (!result.Succeeded)
         {
-            return RedirectToAction("Login", new { error = "Google authentication failed" });
+            // Log the error for debugging
+            var error = result.Failure?.Message ?? "Unknown error";
+            return RedirectToAction("Login", "Account", new { error = $"Google authentication failed: {error}" });
         }
 
         var claims = result.Principal?.Claims;

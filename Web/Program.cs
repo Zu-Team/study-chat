@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +17,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+// Persist DataProtection keys on Azure App Service (prevents auth cookies becoming unreadable across restarts/instances)
+// On Azure Linux, HOME is typically /home and is the durable, shared volume for the app.
+var home = Environment.GetEnvironmentVariable("HOME");
+if (!string.IsNullOrWhiteSpace(home))
+{
+    var keysDir = new DirectoryInfo(Path.Combine(home, "data-protection-keys"));
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(keysDir)
+        .SetApplicationName("StudyChat");
+}
 
 // Add DbContext with PostgreSQL provider
 // Connection string is loaded from:
@@ -193,6 +206,10 @@ builder.Services.AddAuthentication(options =>
                 claimsPrincipal,
                 authProperties);
             
+            // Ensure we always land on StudyChat after a successful Google sign-in
+            // (some deployments can lose/clear the original RedirectUri and fall back to "/").
+            context.ReturnUri = "/StudyChat/Index";
+
             // Don't override RedirectUri - let it use the one from challenge (/Account/GoogleCallback)
             // The cookie is now set, so when GoogleCallback is reached, the user will be authenticated
             logger.LogInformation("Google authentication successful, user signed in with cookies. Email: {Email}, UserId: {UserId}. Redirecting to GoogleCallback.", email, user.Id);

@@ -1,5 +1,6 @@
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Web.Data;
 using Web.Models;
 
@@ -12,6 +13,40 @@ public class UserService
     public UserService(ApplicationDbContext context)
     {
         _context = context;
+    }
+
+    public async Task<User> CreateLocalUserAsync(string email, string password, string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("Email is required.", nameof(email));
+        if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password is required.", nameof(password));
+
+        var normalizedEmail = email.Trim();
+        var existing = await _context.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        if (existing != null)
+        {
+            throw new InvalidOperationException("A user with this email already exists.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim(),
+            Email = normalizedEmail,
+            AuthProvider = "local",
+            EmailVerified = false,
+            IsActive = true,
+            CreatedAt = now,
+            LastLoginAt = now
+        };
+
+        // Hash the password using ASP.NET Core's built-in password hasher (PBKDF2-based).
+        var hasher = new PasswordHasher<User>();
+        user.PasswordHash = hasher.HashPassword(user, password);
+
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        return user;
     }
 
     public async Task<User> UpsertGoogleUserAsync(string googleSub, string email, string? name)

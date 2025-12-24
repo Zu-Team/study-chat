@@ -8,7 +8,32 @@
         <h1 class="auth-title">Create Account</h1>
         <p class="auth-subtitle">Sign up to get started with SmartStudy</p>
         
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="validation-summary-errors">
+                <ul>
+                    @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                    {
+                        <li>@error.ErrorMessage</li>
+                    }
+                </ul>
+            </div>
+        }
+        
         <form asp-action="Register" method="post">
+            @Html.AntiForgeryToken()
+            
+            <div class="mb-4">
+                <label for="fullName" class="form-label">Full name</label>
+                <input type="text"
+                       class="form-control form-control-lg"
+                       id="fullName"
+                       name="fullName"
+                       placeholder="Enter your name"
+                       required
+                       autocomplete="name" />
+            </div>
+
             <div class="mb-4">
                 <label for="email" class="form-label">Email</label>
                 <input type="email" 
@@ -27,17 +52,6 @@
                        id="password" 
                        name="password" 
                        placeholder="Create a password" 
-                       required 
-                       autocomplete="new-password" />
-            </div>
-
-            <div class="mb-4">
-                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <input type="password" 
-                       class="form-control form-control-lg" 
-                       id="confirmPassword" 
-                       name="confirmPassword" 
-                       placeholder="Confirm your password" 
                        required 
                        autocomplete="new-password" />
             </div>

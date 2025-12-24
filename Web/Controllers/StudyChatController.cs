@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Web.Services;
 
 namespace Web.Controllers
@@ -10,12 +11,14 @@ namespace Web.Controllers
     {
         private readonly ChatService _chatService;
         private readonly UserService _userService;
+        private readonly ILogger<StudyChatController> _logger;
         private const string StudyChatUserIdClaim = "studychat_user_id";
 
-        public StudyChatController(ChatService chatService, UserService userService)
+        public StudyChatController(ChatService chatService, UserService userService, ILogger<StudyChatController> logger)
         {
             _chatService = chatService;
             _userService = userService;
+            _logger = logger;
         }
 
         private async Task<Guid?> ResolveUserIdAsync()
@@ -55,8 +58,20 @@ namespace Web.Controllers
             }
 
             // Load all chats for sidebar
-            var chats = await _chatService.GetChatsForUserAsync(userId.Value);
-            ViewBag.Chats = chats;
+            try
+            {
+                var chats = await _chatService.GetChatsForUserAsync(userId.Value);
+                ViewBag.Chats = chats;
+            }
+            catch (Exception ex)
+            {
+                // If DB tables are missing/migrations not applied, this throws and looks like "auth failed"
+                // because production redirects errors to Login. Instead, render the page with an error banner.
+                var traceId = HttpContext.TraceIdentifier;
+                _logger.LogError(ex, "Failed to load chats. TraceId={TraceId}", traceId);
+                ViewBag.ErrorMessage = $"We couldn't load your chats due to a server error. Ref: {traceId}";
+                ViewBag.Chats = new List<Models.Chat>();
+            }
 
             // Load messages if chatId is provided and belongs to user
             List<Models.Message>? messages = null;
@@ -64,12 +79,21 @@ namespace Web.Controllers
 
             if (chatId.HasValue)
             {
-                selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, userId.Value);
-                if (selectedChat != null)
+                try
                 {
-                    messages = await _chatService.GetMessagesAsync(chatId.Value);
-                    ViewBag.SelectedChat = selectedChat;
-                    ViewBag.ChatTitle = selectedChat.Name ?? "Untitled Chat";
+                    selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, userId.Value);
+                    if (selectedChat != null)
+                    {
+                        messages = await _chatService.GetMessagesAsync(chatId.Value);
+                        ViewBag.SelectedChat = selectedChat;
+                        ViewBag.ChatTitle = selectedChat.Name ?? "Untitled Chat";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var traceId = HttpContext.TraceIdentifier;
+                    _logger.LogError(ex, "Failed to load selected chat/messages. TraceId={TraceId}, ChatId={ChatId}", traceId, chatId.Value);
+                    ViewBag.ErrorMessage = $"We couldn't load this chat due to a server error. Ref: {traceId}";
                 }
             }
 
@@ -91,7 +115,17 @@ namespace Web.Controllers
             }
 
             // Create new chat
-            var newChat = await _chatService.CreateNewChatAsync(userId.Value);
+            Models.Chat newChat;
+            try
+            {
+                newChat = await _chatService.CreateNewChatAsync(userId.Value);
+            }
+            catch (Exception ex)
+            {
+                var traceId = HttpContext.TraceIdentifier;
+                _logger.LogError(ex, "Failed to create new chat. TraceId={TraceId}", traceId);
+                return RedirectToAction("Index", new { error = $"Couldn't create chat due to a server error. Ref: {traceId}" });
+            }
 
             // Redirect to the new chat
             return RedirectToAction("Index", new { chatId = newChat.Id });

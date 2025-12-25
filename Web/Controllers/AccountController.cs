@@ -37,7 +37,7 @@ public class AccountController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Login(string email, string password, bool rememberMe = false, string? returnUrl = null)
+    public async Task<IActionResult> Login(string email, string password, string? returnUrl = null)
     {
         var traceId = HttpContext.TraceIdentifier;
 
@@ -109,14 +109,9 @@ public class AccountController : Controller
 
             var props = new AuthenticationProperties
             {
-                IsPersistent = rememberMe,
+                IsPersistent = false, // Session cookie - deleted when browser closes
                 AllowRefresh = true
             };
-
-            if (rememberMe)
-            {
-                props.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
-            }
 
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, props);
 

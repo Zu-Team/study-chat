@@ -13,6 +13,7 @@ using Web.Data;
 using Web.Models;
 using Web.Services;
 using Web.Middleware;
+using Web.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -215,7 +216,8 @@ builder.Services.AddAuthentication(options =>
             context.Principal = claimsPrincipal;
             
             // Link session to user (update session with UserId)
-            var sessionId = context.HttpContext.Request.Cookies["studychat_session_id"];
+            // Use extension method to get session ID from HttpContext.Items or cookie
+            var sessionId = context.HttpContext.GetSessionId();
             if (!string.IsNullOrEmpty(sessionId))
             {
                 try
@@ -232,12 +234,20 @@ builder.Services.AddAuthentication(options =>
                         await dbContext.SaveChangesAsync();
                         logger.LogInformation("Linked session {SessionId} to user {UserId} during Google auth", sessionId, user.Id);
                     }
+                    else
+                    {
+                        logger.LogWarning("Session {SessionId} not found in database during Google auth linking", sessionId);
+                    }
                 }
                 catch (Exception sessionEx)
                 {
                     // Log but don't fail - session linking is not critical
-                    logger.LogWarning(sessionEx, "Failed to link session to user during Google auth");
+                    logger.LogError(sessionEx, "Failed to link session {SessionId} to user {UserId} during Google auth", sessionId, user.Id);
                 }
+            }
+            else
+            {
+                logger.LogWarning("No session ID found in HttpContext during Google auth. UserId={UserId}", user.Id);
             }
             
             // Let the Google handler issue the cookie using our principal + properties.

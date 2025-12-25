@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Web.Services;
 using Web.Data;
 using Web.Models;
+using Web.Extensions;
 
 namespace Web.Controllers;
 
@@ -303,6 +304,12 @@ public class AccountController : Controller
 
             if (User.Identity?.IsAuthenticated == true)
             {
+                // Link session to user if not already linked (fallback in case OnTicketReceived didn't do it)
+                var userIdClaim = User.FindFirst("studychat_user_id")?.Value;
+                if (!string.IsNullOrEmpty(userIdClaim) && long.TryParse(userIdClaim, out var userId))
+                {
+                    await LinkSessionToUserAsync(userId);
+                }
                 return LocalRedirect(returnUrl);
             }
 
@@ -311,6 +318,14 @@ public class AccountController : Controller
             if (cookieResult.Succeeded && cookieResult.Principal != null)
             {
                 HttpContext.User = cookieResult.Principal;
+                
+                // Link session to user if not already linked (fallback in case OnTicketReceived didn't do it)
+                var userIdClaim = cookieResult.Principal.FindFirst("studychat_user_id")?.Value;
+                if (!string.IsNullOrEmpty(userIdClaim) && long.TryParse(userIdClaim, out var userId))
+                {
+                    await LinkSessionToUserAsync(userId);
+                }
+                
                 return LocalRedirect(returnUrl);
             }
 
@@ -385,7 +400,8 @@ public class AccountController : Controller
     {
         try
         {
-            var sessionId = Request.Cookies[SessionIdCookieName];
+            // Use extension method to get session ID from HttpContext.Items or cookie
+            var sessionId = HttpContext.GetSessionId();
             if (!string.IsNullOrEmpty(sessionId))
             {
                 var session = await _dbContext.Sessions

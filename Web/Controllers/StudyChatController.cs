@@ -287,65 +287,78 @@ namespace Web.Controllers
 
         // POST: /StudyChat/NewChat
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> NewChat(string? chatName)
         {
-            // Step 1: Get session ID from cookie
-            var sessionId = HttpContext.GetSessionId();
+            var traceId = HttpContext.TraceIdentifier;
             
-            // Step 2: Check if session ID exists
-            if (string.IsNullOrEmpty(sessionId))
-            {
-                _logger.LogWarning("No session ID found in cookie. Redirecting to login.");
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 3: Look up session in database (use AsNoTracking for read-only query)
-            Models.Session? session = null;
             try
             {
-                session = await _dbContext.Sessions
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                // Resolve user ID - try session first, then fall back to cookie authentication
+                long? userId = null;
+                
+                // Step 1: Try to get user ID from session (session-based authentication)
+                var sessionId = HttpContext.GetSessionId();
+                if (!string.IsNullOrEmpty(sessionId))
+                {
+                    try
+                    {
+                        var session = await _dbContext.Sessions
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                        
+                        if (session != null && session.UserId.HasValue)
+                        {
+                            userId = session.UserId.Value;
+                            _logger.LogInformation("User {UserId} authenticated via session {SessionId} for NewChat", userId, sessionId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error looking up session in database for NewChat. SessionId={SessionId}", sessionId);
+                    }
+                }
+                
+                // Step 2: Fallback - get user ID from cookie authentication claims
+                if (!userId.HasValue)
+                {
+                    userId = await ResolveUserIdFromClaimsAsync();
+                    if (userId.HasValue)
+                    {
+                        _logger.LogInformation("User {UserId} authenticated via cookie claims for NewChat", userId.Value);
+                    }
+                }
+                
+                // Step 3: If no user ID found, redirect to login
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("No user ID found via session or cookie authentication for NewChat. Redirecting to login.");
+                    return RedirectToAction("Login", "Account");
+                }
+                
+                // Step 4: Create new chat with provided name
+                Models.Chat newChat;
+                try
+                {
+                    newChat = await _chatService.CreateNewChatAsync(userId.Value, chatName);
+                    _logger.LogInformation("Created new chat {ChatId} for user {UserId}", newChat.Id, userId.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to create new chat. TraceId={TraceId}, UserId={UserId}", traceId, userId.Value);
+                    return RedirectToAction("Index", new { error = $"Couldn't create chat due to a server error. Ref: {traceId}" });
+                }
+
+                // Redirect to the new chat
+                return RedirectToAction("Index", new { chatId = newChat.Id });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error looking up session in database. SessionId={SessionId}", sessionId);
-                return RedirectToAction("Login", "Account");
+                // Catch any unhandled exceptions to prevent 502 errors
+                _logger.LogError(ex, "Unhandled exception in NewChat. TraceId={TraceId}, ExceptionType={ExceptionType}", 
+                    traceId, ex.GetType().Name);
+                return RedirectToAction("Index", new { error = $"An unexpected error occurred. Ref: {traceId}" });
             }
-
-            // Step 4: Check if session exists
-            if (session == null)
-            {
-                _logger.LogWarning("Session not found in database. SessionId={SessionId}. Redirecting to login.", sessionId);
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 5: Check if user_id (foreign key) is null
-            if (!session.UserId.HasValue)
-            {
-                // Session exists but user_id is null (user not logged in)
-                _logger.LogInformation("Session {SessionId} exists but user_id is null (anonymous user). Redirecting to login.", sessionId);
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 6: User is logged in (user_id is not null) - proceed
-            var userId = session.UserId.Value;
-
-            // Create new chat with provided name
-            Models.Chat newChat;
-            try
-            {
-                newChat = await _chatService.CreateNewChatAsync(userId, chatName);
-            }
-            catch (Exception ex)
-            {
-                var traceId = HttpContext.TraceIdentifier;
-                _logger.LogError(ex, "Failed to create new chat. TraceId={TraceId}", traceId);
-                return RedirectToAction("Index", new { error = $"Couldn't create chat due to a server error. Ref: {traceId}" });
-            }
-
-            // Redirect to the new chat
-            return RedirectToAction("Index", new { chatId = newChat.Id });
         }
     }
 }

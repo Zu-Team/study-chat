@@ -7,10 +7,60 @@
 <div class="study-chat-container">
     <!-- Left Sidebar -->
     <aside class="chat-sidebar">
-        <div class="sidebar-header">
-            <h2 class="app-title">StudyChat</h2>
-            <div style="margin-top: 0.5rem;">
-                <a asp-action="Logout" asp-controller="Account" class="text-decoration-none" style="color: #888888; font-size: 0.85rem;">Logout</a>
+        @{
+            var userName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "User";
+            var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
+            // Get initials for avatar (first letter of first name and first letter of last name, or first two letters of name)
+            var initials = "";
+            if (!string.IsNullOrEmpty(userName))
+            {
+                var nameParts = userName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (nameParts.Length >= 2)
+                {
+                    initials = (nameParts[0][0].ToString() + nameParts[nameParts.Length - 1][0].ToString()).ToUpper();
+                }
+                else if (userName.Length >= 2)
+                {
+                    initials = userName.Substring(0, 2).ToUpper();
+                }
+                else
+                {
+                    initials = userName.Substring(0, 1).ToUpper() + userName.Substring(0, 1).ToUpper();
+                }
+            }
+            else if (!string.IsNullOrEmpty(userEmail))
+            {
+                initials = userEmail.Substring(0, 2).ToUpper();
+            }
+            else
+            {
+                initials = "U";
+            }
+        }
+        <div class="sidebar-header" style="display: flex; align-items: center; gap: 12px; padding: 1rem; border-bottom: 1px solid #333;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; flex-shrink: 0;">
+                @initials
+            </div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="color: #ffffff; font-weight: 500; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    @userName
+                </div>
+                <div style="color: #888888; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    @userEmail
+                </div>
+            </div>
+            <div style="position: relative;">
+                <button type="button" onclick="toggleUserMenu()" style="background: transparent; border: none; color: #888888; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+                    </svg>
+                </button>
+                <div id="userMenu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 8px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 8px 0; min-width: 150px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 1000;">
+                    <a asp-action="Logout" asp-controller="Account" style="display: block; padding: 10px 16px; color: #ffffff; text-decoration: none; font-size: 0.9rem; transition: background 0.2s;" 
+                       onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background='transparent'">
+                        Logout
+                    </a>
+                </div>
             </div>
         </div>
         
@@ -181,6 +231,23 @@
 
 @section Scripts {
     <script>
+        // User Menu Toggle
+        function toggleUserMenu() {
+            const menu = document.getElementById('userMenu');
+            if (menu) {
+                menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Close user menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('userMenu');
+            const button = event.target.closest('button[onclick="toggleUserMenu()"]');
+            if (menu && !menu.contains(event.target) && !button) {
+                menu.style.display = 'none';
+            }
+        });
+
         // New Chat Modal Functions
         function showNewChatModal() {
             const modal = document.getElementById('newChatModal');

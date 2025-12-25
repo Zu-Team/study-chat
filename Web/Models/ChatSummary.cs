@@ -8,11 +8,12 @@ public class ChatSummary
 {
     [Key]
     [Column("id")]
-    public Guid Id { get; set; } = Guid.NewGuid();
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public long Id { get; set; }
 
     [Required]
     [Column("chat_id")]
-    public Guid ChatId { get; set; }
+    public long ChatId { get; set; }
 
     [Required]
     [Column("summary_text")]

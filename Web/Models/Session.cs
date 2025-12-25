@@ -8,11 +8,12 @@ public class Session
 {
     [Key]
     [Column("id")]
-    public Guid Id { get; set; } = Guid.NewGuid();
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public long Id { get; set; }
 
     [Required]
     [Column("user_id")]
-    public Guid UserId { get; set; }
+    public long UserId { get; set; }
 
     [Required]
     [Column("title")]

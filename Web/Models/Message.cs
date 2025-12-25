@@ -13,10 +13,10 @@ public class Message
 
     [Required]
     [Column("chat_id")]
-    public Guid ChatId { get; set; }
+    public long ChatId { get; set; }
 
     [Column("sender_id")]
-    public Guid? SenderId { get; set; }
+    public long? SenderId { get; set; }
 
     [Required]
     [Column("content")]

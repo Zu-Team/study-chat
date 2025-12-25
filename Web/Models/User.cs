@@ -8,7 +8,8 @@ public class User
 {
     [Key]
     [Column("id")]
-    public Guid Id { get; set; } = Guid.NewGuid();
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public long Id { get; set; }
 
     [Column("full_name")]
     [MaxLength(500)]

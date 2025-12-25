@@ -22,19 +22,19 @@ namespace Web.Controllers
             _logger = logger;
         }
 
-        private async Task<Guid?> ResolveUserIdAsync()
+        private async Task<long?> ResolveUserIdAsync()
         {
             // Prefer an explicit app user-id claim (set during Google sign-in)
             var raw =
                 User.FindFirst(StudyChatUserIdClaim)?.Value ??
                 User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (!string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out var userId))
+            if (!string.IsNullOrWhiteSpace(raw) && long.TryParse(raw, out var userId))
             {
                 return userId;
             }
 
-            // Fallback: if the NameIdentifier is Google's "sub" (not a GUID),
+            // Fallback: if the NameIdentifier is Google's "sub" (not a number),
             // resolve our local user by email.
             var email = User.FindFirst(ClaimTypes.Email)?.Value;
             if (!string.IsNullOrWhiteSpace(email))
@@ -49,8 +49,8 @@ namespace Web.Controllers
             return null;
         }
 
-        // GET: /StudyChat?chatId={guid}
-        public async Task<IActionResult> Index(Guid? chatId)
+        // GET: /StudyChat?chatId={id}
+        public async Task<IActionResult> Index(long? chatId)
         {
             var userId = await ResolveUserIdAsync();
             if (userId == null)

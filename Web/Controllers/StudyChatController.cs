@@ -123,25 +123,47 @@ namespace Web.Controllers
         // GET: /StudyChat?chatId={id}
         public async Task<IActionResult> Index(long? chatId)
         {
-            // Get session ID from cookie
+            // Step 1: Get session ID from cookie
             var sessionId = HttpContext.GetSessionId();
             
-            // Resolve user ID from session (session-based authentication)
-            var userId = await ResolveUserIdFromSessionAsync();
-            
-            // If no user ID from session, check if user is authenticated via claims (fallback)
-            if (!userId.HasValue)
+            // Step 2: Check if session ID exists
+            if (string.IsNullOrEmpty(sessionId))
             {
-                userId = await ResolveUserIdFromClaimsAsync();
-            }
-
-            // If still no user ID, redirect to login
-            if (userId == null)
-            {
-                _logger.LogWarning("No user ID resolved. SessionId={SessionId}, IsAuthenticated={IsAuthenticated}", 
-                    sessionId, User.Identity?.IsAuthenticated);
+                _logger.LogWarning("No session ID found in cookie. Redirecting to login.");
                 return RedirectToAction("Login", "Account");
             }
+
+            // Step 3: Look up session in database
+            Models.Session? session = null;
+            try
+            {
+                session = await _dbContext.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error looking up session in database. SessionId={SessionId}", sessionId);
+                return RedirectToAction("Login", "Account");
+            }
+
+            // Step 4: Check if session exists
+            if (session == null)
+            {
+                _logger.LogWarning("Session not found in database. SessionId={SessionId}. Redirecting to login.", sessionId);
+                return RedirectToAction("Login", "Account");
+            }
+
+            // Step 5: Check if user_id (foreign key) is null
+            if (!session.UserId.HasValue)
+            {
+                // Session exists but user_id is null (user not logged in)
+                _logger.LogInformation("Session {SessionId} exists but user_id is null (anonymous user). Redirecting to login.", sessionId);
+                return RedirectToAction("Login", "Account");
+            }
+
+            // Step 6: User is logged in (user_id is not null) - allow access to study page
+            var userId = session.UserId.Value;
+            _logger.LogInformation("User {UserId} authenticated via session {SessionId}. Allowing access to study page.", userId, sessionId);
 
             // Load all chats for sidebar using user_id from session
             // Initialize with empty list - if there are no chats, that's fine, not an error

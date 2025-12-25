@@ -219,8 +219,8 @@ builder.Services.AddAuthentication(options =>
             {
                 context.Properties.IsPersistent = true;
                 context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+                context.Properties.AllowRefresh = true;
             }
-            context.Properties.AllowRefresh = true;
             
             // Don't force a return path here. We honor the RedirectUri set in /Account/GoogleLogin,
             // which routes through /Account/GoogleCallback (and preserves any returnUrl).

@@ -33,10 +33,10 @@
             <div class="chat-list">
                 @if (ViewBag.Chats != null)
                 {
-                    var chats = (List<Web.Models.Chat>)ViewBag.Chats;
+                    var chatList = (List<Web.Models.Chat>)ViewBag.Chats;
                     var selectedChatId = ViewBag.SelectedChat != null ? ((Web.Models.Chat)ViewBag.SelectedChat).Id : (long?)null;
                     
-                    @if (chats.Count == 0)
+                    @if (chatList.Count == 0)
                     {
                         <div class="text-center text-muted" style="padding: 2rem 1rem; color: #888888;">
                             <p>No chats yet. Start a new conversation!</p>
@@ -44,7 +44,7 @@
                     }
                     else
                     {
-                    @foreach (var chat in chats)
+                    @foreach (var chat in chatList)
                     {
                         var isActive = selectedChatId.HasValue && chat.Id == selectedChatId.Value;
                         <a href="@Url.Action("Index", "StudyChat", new { chatId = chat.Id })" 

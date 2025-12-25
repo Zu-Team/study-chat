@@ -161,6 +161,7 @@ public class SessionIdMiddleware
                         }
                     }
                 });
+            }
         }
         else
         {

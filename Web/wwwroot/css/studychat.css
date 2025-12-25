@@ -297,7 +297,7 @@
     align-items: flex-end;
     gap: 0.75rem;
     background-color: #1e1e1e;
-    border: 1px solid #333;
+    border: none;
     border-radius: 24px;
     padding: 0.5rem 0.75rem;
     transition: all 0.3s ease;
@@ -305,7 +305,6 @@
 }
 
 .input-wrapper:focus-within {
-    border-color: #4a9eff;
     box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.15), 0 4px 12px rgba(74, 158, 255, 0.2);
     background-color: #252525;
 }

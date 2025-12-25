@@ -108,12 +108,19 @@ public class SessionIdMiddleware
             // Only create new session if we didn't reuse an existing one
             if (!reusedExistingSession)
             {
+                // Capture values from HttpContext before starting background task
+                // (HttpContext may be disposed before Task.Run completes)
+                var ipAddress = context.Connection.RemoteIpAddress?.ToString();
+                var userAgent = context.Request.Headers["User-Agent"].ToString();
+                var serviceProvider = context.RequestServices;
+                
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        using var scope = context.RequestServices.CreateScope();
+                        using var scope = serviceProvider.CreateScope();
                         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
                         
                         // Double-check if session already exists (race condition protection)
                         var existingSession = await dbContext.Sessions
@@ -126,22 +133,24 @@ public class SessionIdMiddleware
                                 SessionId = sessionId,
                                 UserId = null, // Null before login
                                 Title = null, // Anonymous session, no title needed
-                                IpAddress = context.Connection.RemoteIpAddress?.ToString(),
-                                UserAgent = context.Request.Headers["User-Agent"].ToString(),
+                                IpAddress = ipAddress,
+                                UserAgent = userAgent,
                                 CreatedAt = DateTimeOffset.UtcNow,
                                 LastAccessedAt = DateTimeOffset.UtcNow
                             };
 
                             dbContext.Sessions.Add(session);
                             await dbContext.SaveChangesAsync();
+                            logger?.LogInformation("New session created in database: {SessionId}", sessionId);
                         }
                         else
                         {
                             // Update existing session's last accessed time
                             existingSession.LastAccessedAt = DateTimeOffset.UtcNow;
-                            existingSession.IpAddress = context.Connection.RemoteIpAddress?.ToString();
-                            existingSession.UserAgent = context.Request.Headers["User-Agent"].ToString();
+                            existingSession.IpAddress = ipAddress;
+                            existingSession.UserAgent = userAgent;
                             await dbContext.SaveChangesAsync();
+                            logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", sessionId);
                         }
                     }
                     catch (Exception ex)
@@ -150,9 +159,9 @@ public class SessionIdMiddleware
                         // Common error: column "session_id" does not exist - run migration SQL
                         try
                         {
-                            using var errorScope = context.RequestServices.CreateScope();
+                            using var errorScope = serviceProvider.CreateScope();
                             var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                            logger?.LogWarning(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
+                            logger?.LogError(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
                                 "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
                         }
                         catch

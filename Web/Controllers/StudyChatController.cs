@@ -146,7 +146,7 @@ namespace Web.Controllers
 
         // POST: /StudyChat/NewChat
         [HttpPost]
-        public async Task<IActionResult> NewChat()
+        public async Task<IActionResult> NewChat(string? chatName)
         {
             var userId = await ResolveUserIdAsync();
             if (userId == null)
@@ -154,11 +154,11 @@ namespace Web.Controllers
                 return RedirectToAction("Login", "Account");
             }
 
-            // Create new chat
+            // Create new chat with provided name
             Models.Chat newChat;
             try
             {
-                newChat = await _chatService.CreateNewChatAsync(userId.Value);
+                newChat = await _chatService.CreateNewChatAsync(userId.Value, chatName);
             }
             catch (Exception ex)
             {

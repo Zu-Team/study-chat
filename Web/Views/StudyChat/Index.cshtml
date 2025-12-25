@@ -21,14 +21,12 @@
                     @ViewBag.ErrorMessage
                 </div>
             }
-            <form asp-action="NewChat" asp-controller="StudyChat" method="post" style="margin: 0;">
-                <button class="btn-new-chat" type="submit">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" class="me-2">
-                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                    </svg>
-                    New Chat
-                </button>
-            </form>
+            <button class="btn-new-chat" type="button" id="btnNewChat" onclick="showNewChatModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" class="me-2">
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+                New Chat
+            </button>
             
             <hr class="sidebar-divider" />
             
@@ -65,69 +63,166 @@
 
     <!-- Main Chat Area -->
     <main class="chat-main">
-        <!-- Chat Header -->
-        <header class="chat-header">
-            <h3 class="chat-title">@(ViewBag.ChatTitle ?? "Study Chat")</h3>
-        </header>
+        @{
+            var chats = ViewBag.Chats as List<Web.Models.Chat> ?? new List<Web.Models.Chat>();
+            var hasChats = chats.Count > 0;
+            var hasSelectedChat = ViewBag.HasSelectedChat == true;
+        }
+        
+        @if (!hasChats)
+        {
+            <!-- No Chats State -->
+            <div class="no-chats-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 2rem; text-align: center;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">📚</div>
+                <h2 style="color: #ffffff; margin-bottom: 0.5rem; font-size: 1.5rem;">Create a chat to start studying</h2>
+                <p style="color: #888888; margin-bottom: 2rem;">Click "New Chat" to begin your learning journey</p>
+            </div>
+        }
+        else
+        {
+            <!-- Chat Header -->
+            <header class="chat-header">
+                <h3 class="chat-title">@(ViewBag.ChatTitle ?? "Study Chat")</h3>
+            </header>
 
-        <!-- Messages Area -->
-        <div class="messages-container" id="messagesContainer">
-            @if (ViewBag.HasSelectedChat == true && ViewBag.Messages != null)
-            {
-                var messages = (List<Web.Models.Message>)ViewBag.Messages;
-                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                
-                @if (messages.Count == 0)
+            <!-- Messages Area -->
+            <div class="messages-container" id="messagesContainer">
+                @if (hasSelectedChat && ViewBag.Messages != null)
                 {
-                    <div class="empty-state">
-                        <div class="empty-state-text">No messages yet. Start the conversation!</div>
-                    </div>
+                    var messages = (List<Web.Models.Message>)ViewBag.Messages;
+                    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    
+                    @if (messages.Count == 0)
+                    {
+                        <div class="empty-state">
+                            <div class="empty-state-text">No messages yet. Start the conversation!</div>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var message in messages)
+                        {
+                            var isUserMessage = message.SenderId.HasValue && message.SenderId.ToString() == userId;
+                            <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
+                                <div class="message-bubble">
+                                    @Html.Raw(message.Content.Replace("\n", "<br/>"))
+                                </div>
+                            </div>
+                        }
+                    }
                 }
                 else
                 {
-                    @foreach (var message in messages)
-                    {
-                        var isUserMessage = message.SenderId.HasValue && message.SenderId.ToString() == userId;
-                        <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
-                            <div class="message-bubble">
-                                @Html.Raw(message.Content.Replace("\n", "<br/>"))
-                            </div>
-                        </div>
-                    }
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💬</div>
+                        <div class="empty-state-text">Select a chat from the sidebar to start your study session</div>
+                    </div>
                 }
-            }
-            else
+            </div>
+
+            <!-- Message Input Area (only show if chat is selected) -->
+            @if (hasSelectedChat)
             {
-                <div class="empty-state">
-                    <div class="empty-state-icon">💬</div>
-                    <div class="empty-state-text">Start a new chat to begin your study session</div>
+                <div class="message-input-container">
+                    <form class="message-form" id="messageForm">
+                        <div class="input-wrapper">
+                            <textarea 
+                                class="message-input" 
+                                id="messageInput" 
+                                placeholder="Type your message here..." 
+                                rows="1"
+                                required></textarea>
+                            <button type="submit" class="send-button" aria-label="Send message">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm-1.138-1.138L13.424 1.87 4.338 6.636l1.16 1.296Z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
                 </div>
             }
-        </div>
-
-        <!-- Message Input Area -->
-        <div class="message-input-container">
-            <form class="message-form" id="messageForm">
-                <div class="input-wrapper">
-                    <textarea 
-                        class="message-input" 
-                        id="messageInput" 
-                        placeholder="Type your message here..." 
-                        rows="1"
-                        required></textarea>
-                    <button type="submit" class="send-button" aria-label="Send message">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm-1.138-1.138L13.424 1.87 4.338 6.636l1.16 1.296Z"/>
-                        </svg>
+        }
+    </main>
+    
+    <!-- New Chat Modal -->
+    <div id="newChatModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #1a1a1a; border-radius: 12px; padding: 2rem; min-width: 400px; max-width: 90%; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);">
+            <h2 style="color: #ffffff; margin-bottom: 1.5rem; font-size: 1.5rem;">Create New Chat</h2>
+            <form asp-action="NewChat" asp-controller="StudyChat" method="post" id="newChatForm">
+                <div style="margin-bottom: 1.5rem;">
+                    <label for="chatName" style="display: block; color: #cccccc; margin-bottom: 0.5rem; font-size: 0.9rem;">Chat Name</label>
+                    <input 
+                        type="text" 
+                        id="chatName" 
+                        name="chatName" 
+                        placeholder="Enter chat name (e.g., Math Study, History Review)"
+                        style="width: 100%; padding: 0.75rem; background: #2a2a2a; border: 1px solid #444; border-radius: 6px; color: #ffffff; font-size: 1rem;"
+                        maxlength="500"
+                        autofocus
+                        required />
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button 
+                        type="button" 
+                        onclick="closeNewChatModal()"
+                        style="padding: 0.75rem 1.5rem; background: #333; color: #ffffff; border: 1px solid #555; border-radius: 6px; cursor: pointer; font-size: 1rem;">
+                        Cancel
+                    </button>
+                    <button 
+                        type="submit"
+                        style="padding: 0.75rem 1.5rem; background: #0066cc; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem;">
+                        Create Chat
                     </button>
                 </div>
             </form>
         </div>
-    </main>
+    </div>
 </div>
 
 @section Scripts {
     <script>
+        // New Chat Modal Functions
+        function showNewChatModal() {
+            const modal = document.getElementById('newChatModal');
+            const input = document.getElementById('chatName');
+            if (modal) {
+                modal.style.display = 'flex';
+                if (input) {
+                    setTimeout(() => input.focus(), 100);
+                }
+            }
+        }
+
+        function closeNewChatModal() {
+            const modal = document.getElementById('newChatModal');
+            const form = document.getElementById('newChatForm');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+            if (form) {
+                form.reset();
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('newChatModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeNewChatModal();
+                    }
+                });
+            }
+
+            // Close modal on Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeNewChatModal();
+                }
+            });
+        });
+
         // Auto-resize textarea
         const messageInput = document.getElementById('messageInput');
         const messagesContainer = document.getElementById('messagesContainer');

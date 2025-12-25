@@ -2,8 +2,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Web.Services;
+using Web.Data;
+using Web.Extensions;
 
 namespace Web.Controllers
 {
@@ -12,17 +15,69 @@ namespace Web.Controllers
     {
         private readonly ChatService _chatService;
         private readonly UserService _userService;
+        private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<StudyChatController> _logger;
         private const string StudyChatUserIdClaim = "studychat_user_id";
+        private const string SessionIdCookieName = "studychat_session_id";
 
-        public StudyChatController(ChatService chatService, UserService userService, ILogger<StudyChatController> logger)
+        public StudyChatController(ChatService chatService, UserService userService, ApplicationDbContext dbContext, ILogger<StudyChatController> logger)
         {
             _chatService = chatService;
             _userService = userService;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
-        private async Task<long?> ResolveUserIdAsync()
+        /// <summary>
+        /// Resolves user ID from session ID cookie.
+        /// Gets session ID from cookie -> looks up session in DB -> gets user_id from session.
+        /// </summary>
+        private async Task<long?> ResolveUserIdFromSessionAsync()
+        {
+            // Get session ID from cookie
+            var sessionId = HttpContext.GetSessionId();
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                _logger.LogWarning("No session ID found in cookie");
+                return null;
+            }
+
+            try
+            {
+                // Look up session in database
+                var session = await _dbContext.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+                if (session == null)
+                {
+                    _logger.LogWarning("Session not found in database. SessionId={SessionId}", sessionId);
+                    return null;
+                }
+
+                // Get user_id from session (foreign key)
+                if (session.UserId.HasValue)
+                {
+                    _logger.LogInformation("Resolved user ID {UserId} from session {SessionId}", session.UserId.Value, sessionId);
+                    return session.UserId.Value;
+                }
+                else
+                {
+                    // Session exists but user is not logged in (anonymous session)
+                    _logger.LogInformation("Session {SessionId} exists but user_id is null (anonymous user)", sessionId);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resolving user ID from session. SessionId={SessionId}", sessionId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Fallback method: Resolves user ID from authentication claims (for backward compatibility)
+        /// </summary>
+        private async Task<long?> ResolveUserIdFromClaimsAsync()
         {
             // Prefer an explicit app user-id claim (set during Google sign-in)
             var raw =
@@ -49,18 +104,49 @@ namespace Web.Controllers
             return null;
         }
 
+        /// <summary>
+        /// Resolves user ID - tries session-based first, then falls back to claims
+        /// </summary>
+        private async Task<long?> ResolveUserIdAsync()
+        {
+            // First try: Get user ID from session (session-based authentication)
+            var userIdFromSession = await ResolveUserIdFromSessionAsync();
+            if (userIdFromSession.HasValue)
+            {
+                return userIdFromSession;
+            }
+
+            // Fallback: Get user ID from authentication claims
+            return await ResolveUserIdFromClaimsAsync();
+        }
+
         // GET: /StudyChat?chatId={id}
         public async Task<IActionResult> Index(long? chatId)
         {
-            var userId = await ResolveUserIdAsync();
+            // Get session ID from cookie
+            var sessionId = HttpContext.GetSessionId();
+            
+            // Resolve user ID from session (session-based authentication)
+            var userId = await ResolveUserIdFromSessionAsync();
+            
+            // If no user ID from session, check if user is authenticated via claims (fallback)
+            if (!userId.HasValue)
+            {
+                userId = await ResolveUserIdFromClaimsAsync();
+            }
+
+            // If still no user ID, redirect to login
             if (userId == null)
             {
+                _logger.LogWarning("No user ID resolved. SessionId={SessionId}, IsAuthenticated={IsAuthenticated}", 
+                    sessionId, User.Identity?.IsAuthenticated);
                 return RedirectToAction("Login", "Account");
             }
 
-            // Load all chats for sidebar
+            // Load all chats for sidebar using user_id from session
             // Initialize with empty list - if there are no chats, that's fine, not an error
             ViewBag.Chats = new List<Models.Chat>();
+            ViewBag.UserId = userId.Value; // Pass user ID to view for debugging if needed
             
             try
             {

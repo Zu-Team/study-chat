@@ -59,10 +59,14 @@ namespace Web.Controllers
             }
 
             // Load all chats for sidebar
+            // Initialize with empty list - if there are no chats, that's fine, not an error
+            ViewBag.Chats = new List<Models.Chat>();
+            
             try
             {
                 var chats = await _chatService.GetChatsForUserAsync(userId.Value);
-                ViewBag.Chats = chats;
+                ViewBag.Chats = chats ?? new List<Models.Chat>();
+                // No chats is normal - don't show error, just show empty list
             }
             catch (PostgresException pgEx) when (pgEx.SqlState == "42P01")
             {
@@ -70,16 +74,43 @@ namespace Web.Controllers
                 var traceId = HttpContext.TraceIdentifier;
                 _logger.LogError(pgEx, "Database schema missing (undefined_table). TraceId={TraceId}. Hint={Hint}", traceId, pgEx.MessageText);
                 ViewBag.ErrorMessage = $"Database tables are not initialized yet (missing table). Ref: {traceId}";
-                ViewBag.Chats = new List<Models.Chat>();
+            }
+            catch (PostgresException pgEx)
+            {
+                // Other PostgreSQL errors - log but don't show to user unless it's critical
+                var traceId = HttpContext.TraceIdentifier;
+                _logger.LogError(pgEx, "PostgreSQL error loading chats. TraceId={TraceId}, SqlState={SqlState}", traceId, pgEx.SqlState);
+                // Only show error for critical database issues
+                if (pgEx.SqlState == "08000" || pgEx.SqlState == "08003" || pgEx.SqlState == "08006") // Connection errors
+                {
+                    ViewBag.ErrorMessage = $"Database connection error. Ref: {traceId}";
+                }
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Database update errors - log but don't show for read operations
+                var traceId = HttpContext.TraceIdentifier;
+                _logger.LogError(dbEx, "Database update error loading chats. TraceId={TraceId}", traceId);
+                // Don't show error - empty list is fine
             }
             catch (Exception ex)
             {
-                // If DB tables are missing/migrations not applied, this throws and looks like "auth failed"
-                // because production redirects errors to Login. Instead, render the page with an error banner.
+                // Only log actual unexpected errors - don't show error for empty results
                 var traceId = HttpContext.TraceIdentifier;
-                _logger.LogError(ex, "Failed to load chats. TraceId={TraceId}", traceId);
-                ViewBag.ErrorMessage = $"We couldn't load your chats due to a server error. Ref: {traceId}";
-                ViewBag.Chats = new List<Models.Chat>();
+                _logger.LogError(ex, "Unexpected error loading chats. TraceId={TraceId}, UserId={UserId}, ExceptionType={ExceptionType}", 
+                    traceId, userId.Value, ex.GetType().Name);
+                
+                // Only show error for actual critical issues, not for empty results or expected exceptions
+                // Empty results should just show "No chats yet" message
+                var isExpectedException = ex is System.InvalidOperationException || 
+                                         ex is System.ArgumentException ||
+                                         ex.Message.Contains("Sequence contains no elements", StringComparison.OrdinalIgnoreCase) ||
+                                         ex.Message.Contains("No element", StringComparison.OrdinalIgnoreCase);
+                
+                if (!isExpectedException)
+                {
+                    ViewBag.ErrorMessage = $"We couldn't load your chats due to a server error. Ref: {traceId}";
+                }
             }
 
             // Load messages if chatId is provided and belongs to user

@@ -1,5 +1,6 @@
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Web.Data;
 using Web.Models;
 
@@ -68,10 +69,13 @@ public class SessionIdMiddleware
                     dbContext.Sessions.Add(session);
                     await dbContext.SaveChangesAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Silently fail - don't break the request if DB save fails
-                    // This ensures the cookie is still set even if DB is unavailable
+                    // Log error but don't break the request - cookie is still set
+                    // Common error: column "session_id" does not exist - run migration SQL
+                    var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                    logger?.LogWarning(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
+                        "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
                 }
             });
         }
@@ -98,9 +102,16 @@ public class SessionIdMiddleware
                         await dbContext.SaveChangesAsync();
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Silently fail - don't break the request if DB update fails
+                    // Log error but don't break the request
+                    try
+                    {
+                        using var scope = context.RequestServices.CreateScope();
+                        var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                        logger?.LogWarning(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
+                    }
+                    catch { }
                 }
             });
         }

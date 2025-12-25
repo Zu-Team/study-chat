@@ -24,7 +24,25 @@ public class SessionAuthenticationMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Only process if user is not already authenticated
+        // Skip if user is already authenticated (e.g., via cookie authentication)
+        // This middleware runs before UseAuthentication(), but cookie auth might have already run
+        // Check both User.Identity and try to authenticate cookie first to avoid unnecessary DB queries
+        if (context.User?.Identity?.IsAuthenticated == true)
+        {
+            await _next(context);
+            return;
+        }
+
+        // Try to authenticate cookie first (this is faster than DB query)
+        var cookieAuthResult = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        if (cookieAuthResult.Succeeded && cookieAuthResult.Principal != null)
+        {
+            context.User = cookieAuthResult.Principal;
+            await _next(context);
+            return;
+        }
+
+        // Only query database if user is not authenticated via cookie
         if (context.User?.Identity?.IsAuthenticated != true)
         {
             var sessionId = context.Request.Cookies[SessionIdCookieName];
@@ -37,7 +55,9 @@ public class SessionAuthenticationMiddleware
                     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     
                     // Find session with UserId (meaning user is logged in)
+                    // Use AsNoTracking() for read-only query to improve performance
                     var session = await dbContext.Sessions
+                        .AsNoTracking()
                         .Include(s => s.User)
                         .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.UserId != null);
                     

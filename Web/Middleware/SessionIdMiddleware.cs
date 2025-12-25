@@ -164,33 +164,47 @@ public class SessionIdMiddleware
             var existingSessionId = context.Request.Cookies[SessionIdCookieName];
             context.Items["SessionId"] = existingSessionId;
 
-            // Update last accessed time in database - await directly to ensure it completes
-            try
+            // Update last accessed time in database - do this in background to avoid blocking requests
+            // Only update if it's been more than 5 minutes since last update to reduce DB load
+            _ = Task.Run(async () =>
             {
-                using var scope = context.RequestServices.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                
-                var session = await dbContext.Sessions
-                    .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
-                
-                if (session != null)
+                try
                 {
-                    session.LastAccessedAt = DateTimeOffset.UtcNow;
-                    await dbContext.SaveChangesAsync();
-                    logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", existingSessionId);
+                    using var scope = context.RequestServices.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                    
+                    var session = await dbContext.Sessions
+                        .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
+                    
+                    if (session != null)
+                    {
+                        // Only update if it's been more than 5 minutes (reduce database writes)
+                        var timeSinceLastUpdate = DateTimeOffset.UtcNow - session.LastAccessedAt;
+                        if (timeSinceLastUpdate.TotalMinutes >= 5)
+                        {
+                            session.LastAccessedAt = DateTimeOffset.UtcNow;
+                            await dbContext.SaveChangesAsync();
+                            logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", existingSessionId);
+                        }
+                    }
+                    else
+                    {
+                        logger?.LogWarning("Session {SessionId} not found in database when updating LastAccessedAt.", existingSessionId);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    logger?.LogWarning("Session {SessionId} not found in database when updating LastAccessedAt.", existingSessionId);
+                    // Log error but don't break the request
+                    try
+                    {
+                        using var errorScope = context.RequestServices.CreateScope();
+                        var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                        logger?.LogError(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
+                    }
+                    catch { }
                 }
-            }
-            catch (Exception ex)
-            {
-                // Log error but don't break the request
-                var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                logger?.LogError(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
-            }
+            });
         }
 
         // Continue to the next middleware

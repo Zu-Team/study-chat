@@ -1,5 +1,6 @@
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Web.Data;
 using Web.Models;
@@ -31,11 +32,14 @@ public class SessionIdMiddleware
             // Generate a new session ID (GUID)
             var sessionId = Guid.NewGuid().ToString("N"); // Format: 32 hex digits without hyphens
             
+            // Get environment to determine if we should use Secure cookies
+            var environment = context.RequestServices.GetRequiredService<IHostEnvironment>();
+            
             // Set cookie options
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true, // Prevents JavaScript access for security
-                Secure = true, // Only sent over HTTPS
+                Secure = !environment.IsDevelopment(), // Only require HTTPS in production (allows HTTP in development)
                 SameSite = SameSiteMode.Lax, // Allows OAuth redirects
                 Expires = DateTimeOffset.UtcNow.AddDays(SessionIdExpirationDays),
                 Path = "/" // Available site-wide

@@ -59,7 +59,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Triggering workflow rerun
 
 // Register services
-builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 

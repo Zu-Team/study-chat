@@ -17,9 +17,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<ChatSummary> ChatSummaries { get; set; }
     public DbSet<ChatQuiz> ChatQuizzes { get; set; }
 
-    // Legacy - can be removed if not needed
-    public DbSet<Student> Students { get; set; }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

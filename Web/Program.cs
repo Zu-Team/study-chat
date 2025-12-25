@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Web.Data;
 using Web.Models;
 using Web.Services;
+using Web.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -324,6 +325,9 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
+
+// Session ID middleware - creates session ID cookie for first-time visitors
+app.UseMiddleware<SessionIdMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseRouting();

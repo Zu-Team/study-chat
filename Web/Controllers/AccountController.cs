@@ -454,34 +454,27 @@ public class AccountController : Controller
 
     public async Task<IActionResult> Logout()
     {
-        // Capture session ID before signing out (HttpContext might be disposed in background task)
+        // Capture session ID before signing out
         var sessionId = HttpContext.GetSessionId();
         var serviceProvider = HttpContext.RequestServices;
         
-        // Sign out immediately - don't wait for session unlink
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        
-        // Unlink session from user (set UserId to null) - do in background to avoid blocking redirect
+        // Unlink session from user (set UserId to null) - MUST be synchronous to ensure it completes
+        // This is critical for logout - we need to ensure the session is unlinked
         if (!string.IsNullOrEmpty(sessionId))
         {
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await UnlinkSessionFromUserAsync(sessionId, serviceProvider);
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        using var errorScope = serviceProvider.CreateScope();
-                        var logger = errorScope.ServiceProvider.GetService<ILogger<AccountController>>();
-                        logger?.LogWarning(ex, "Background session unlink failed during logout. SessionId={SessionId}", sessionId);
-                    }
-                    catch { }
-                }
-            });
+                await UnlinkSessionFromUserAsync(sessionId, serviceProvider);
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't block logout - user should still be able to logout
+                _logger.LogError(ex, "Failed to unlink session {SessionId} during logout", sessionId);
+            }
         }
+        
+        // Sign out after unlinking session
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         
         return RedirectToAction("Login");
     }

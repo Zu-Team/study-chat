@@ -104,72 +104,58 @@ public class SessionIdMiddleware
             // Store in HttpContext.Items for easy access in controllers/views
             context.Items["SessionId"] = sessionId;
 
-            // Save to database (fire and forget - don't block the request)
+            // Save to database - await directly to ensure it completes
             // Only create new session if we didn't reuse an existing one
             if (!reusedExistingSession)
             {
-                // Capture values from HttpContext before starting background task
-                // (HttpContext may be disposed before Task.Run completes)
+                // Capture values from HttpContext
                 var ipAddress = context.Connection.RemoteIpAddress?.ToString();
                 var userAgent = context.Request.Headers["User-Agent"].ToString();
-                var serviceProvider = context.RequestServices;
                 
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    using var scope = context.RequestServices.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                    
+                    // Double-check if session already exists (race condition protection)
+                    var existingSession = await dbContext.Sessions
+                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                    
+                    if (existingSession == null)
                     {
-                        using var scope = serviceProvider.CreateScope();
-                        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                        var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                        
-                        // Double-check if session already exists (race condition protection)
-                        var existingSession = await dbContext.Sessions
-                            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                        
-                        if (existingSession == null)
+                        var session = new Session
                         {
-                            var session = new Session
-                            {
-                                SessionId = sessionId,
-                                UserId = null, // Null before login
-                                Title = null, // Anonymous session, no title needed
-                                IpAddress = ipAddress,
-                                UserAgent = userAgent,
-                                CreatedAt = DateTimeOffset.UtcNow,
-                                LastAccessedAt = DateTimeOffset.UtcNow
-                            };
+                            SessionId = sessionId,
+                            UserId = null, // Null before login
+                            Title = null, // Anonymous session, no title needed
+                            IpAddress = ipAddress,
+                            UserAgent = userAgent,
+                            CreatedAt = DateTimeOffset.UtcNow,
+                            LastAccessedAt = DateTimeOffset.UtcNow
+                        };
 
-                            dbContext.Sessions.Add(session);
-                            await dbContext.SaveChangesAsync();
-                            logger?.LogInformation("New session created in database: {SessionId}", sessionId);
-                        }
-                        else
-                        {
-                            // Update existing session's last accessed time
-                            existingSession.LastAccessedAt = DateTimeOffset.UtcNow;
-                            existingSession.IpAddress = ipAddress;
-                            existingSession.UserAgent = userAgent;
-                            await dbContext.SaveChangesAsync();
-                            logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", sessionId);
-                        }
+                        dbContext.Sessions.Add(session);
+                        await dbContext.SaveChangesAsync();
+                        logger?.LogInformation("New session created in database: {SessionId}", sessionId);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        // Log error but don't break the request - cookie is still set
-                        // Common error: column "session_id" does not exist - run migration SQL
-                        try
-                        {
-                            using var errorScope = serviceProvider.CreateScope();
-                            var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                            logger?.LogError(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
-                                "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
-                        }
-                        catch
-                        {
-                            // If logging fails, ignore - don't break the request
-                        }
+                        // Update existing session's last accessed time
+                        existingSession.LastAccessedAt = DateTimeOffset.UtcNow;
+                        existingSession.IpAddress = ipAddress;
+                        existingSession.UserAgent = userAgent;
+                        await dbContext.SaveChangesAsync();
+                        logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", sessionId);
                     }
-                });
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't break the request - cookie is still set
+                    var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
+                    logger?.LogError(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
+                        "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
+                }
             }
         }
         else
@@ -178,35 +164,33 @@ public class SessionIdMiddleware
             var existingSessionId = context.Request.Cookies[SessionIdCookieName];
             context.Items["SessionId"] = existingSessionId;
 
-            // Update last accessed time in database (fire and forget)
-            _ = Task.Run(async () =>
+            // Update last accessed time in database - await directly to ensure it completes
+            try
             {
-                try
+                using var scope = context.RequestServices.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                
+                var session = await dbContext.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
+                
+                if (session != null)
                 {
-                    using var scope = context.RequestServices.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    
-                    var session = await dbContext.Sessions
-                        .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
-                    
-                    if (session != null)
-                    {
-                        session.LastAccessedAt = DateTimeOffset.UtcNow;
-                        await dbContext.SaveChangesAsync();
-                    }
+                    session.LastAccessedAt = DateTimeOffset.UtcNow;
+                    await dbContext.SaveChangesAsync();
+                    logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", existingSessionId);
                 }
-                catch (Exception ex)
+                else
                 {
-                    // Log error but don't break the request
-                    try
-                    {
-                        using var scope = context.RequestServices.CreateScope();
-                        var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                        logger?.LogWarning(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
-                    }
-                    catch { }
+                    logger?.LogWarning("Session {SessionId} not found in database when updating LastAccessedAt.", existingSessionId);
                 }
-            });
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't break the request
+                var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
+                logger?.LogError(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
+            }
         }
 
         // Continue to the next middleware

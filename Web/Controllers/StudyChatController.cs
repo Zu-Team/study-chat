@@ -123,57 +123,89 @@ namespace Web.Controllers
         // GET: /StudyChat?chatId={id}
         public async Task<IActionResult> Index(long? chatId)
         {
-            // Step 1: Get session ID from cookie
-            var sessionId = HttpContext.GetSessionId();
+            // Resolve user ID - try session first, then fall back to cookie authentication
+            long? userId = null;
             
-            // Step 2: Check if session ID exists
-            if (string.IsNullOrEmpty(sessionId))
+            // Step 1: Try to get user ID from session (session-based authentication)
+            var sessionId = HttpContext.GetSessionId();
+            if (!string.IsNullOrEmpty(sessionId))
             {
-                _logger.LogWarning("No session ID found in cookie. Redirecting to login.");
+                try
+                {
+                    var session = await _dbContext.Sessions
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                    
+                    if (session != null && session.UserId.HasValue)
+                    {
+                        userId = session.UserId.Value;
+                        _logger.LogInformation("User {UserId} authenticated via session {SessionId}", userId, sessionId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error looking up session in database. SessionId={SessionId}", sessionId);
+                }
+            }
+            
+            // Step 2: Fallback - get user ID from cookie authentication claims
+            if (!userId.HasValue)
+            {
+                userId = await ResolveUserIdFromClaimsAsync();
+                if (userId.HasValue)
+                {
+                    _logger.LogInformation("User {UserId} authenticated via cookie claims", userId.Value);
+                    
+                    // If we have a session but it's not linked, link it now (in background)
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using var scope = HttpContext.RequestServices.CreateScope();
+                                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                                var logger = scope.ServiceProvider.GetService<ILogger<StudyChatController>>();
+                                
+                                var session = await dbContext.Sessions
+                                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                                
+                                if (session != null && !session.UserId.HasValue)
+                                {
+                                    session.UserId = userId.Value;
+                                    session.LastAccessedAt = DateTimeOffset.UtcNow;
+                                    await dbContext.SaveChangesAsync();
+                                    logger?.LogInformation("Linked session {SessionId} to user {UserId} during Index access", sessionId, userId.Value);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                var logger = HttpContext.RequestServices.GetService<ILogger<StudyChatController>>();
+                                logger?.LogWarning(ex, "Failed to link session during Index access");
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Step 3: If no user ID found, redirect to login
+            if (!userId.HasValue)
+            {
+                _logger.LogWarning("No user ID found via session or cookie authentication. Redirecting to login.");
                 return RedirectToAction("Login", "Account");
             }
+            
+            // Step 4: User is authenticated - allow access to study page
+            var finalUserId = userId.Value;
 
-            // Step 3: Look up session in database (use AsNoTracking for read-only query)
-            Models.Session? session = null;
-            try
-            {
-                session = await _dbContext.Sessions
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error looking up session in database. SessionId={SessionId}", sessionId);
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 4: Check if session exists
-            if (session == null)
-            {
-                _logger.LogWarning("Session not found in database. SessionId={SessionId}. Redirecting to login.", sessionId);
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 5: Check if user_id (foreign key) is null
-            if (!session.UserId.HasValue)
-            {
-                // Session exists but user_id is null (user not logged in)
-                _logger.LogInformation("Session {SessionId} exists but user_id is null (anonymous user). Redirecting to login.", sessionId);
-                return RedirectToAction("Login", "Account");
-            }
-
-            // Step 6: User is logged in (user_id is not null) - allow access to study page
-            var userId = session.UserId.Value;
-            _logger.LogInformation("User {UserId} authenticated via session {SessionId}. Allowing access to study page.", userId, sessionId);
-
-            // Load all chats for sidebar using user_id from session
+            // Load all chats for sidebar using user_id
             // Initialize with empty list - if there are no chats, that's fine, not an error
             ViewBag.Chats = new List<Models.Chat>();
-            ViewBag.UserId = userId; // Pass user ID to view for debugging if needed
+            ViewBag.UserId = finalUserId; // Pass user ID to view for debugging if needed
             
             try
             {
-                var chats = await _chatService.GetChatsForUserAsync(userId);
+                var chats = await _chatService.GetChatsForUserAsync(finalUserId);
                 ViewBag.Chats = chats ?? new List<Models.Chat>();
                 // No chats is normal - don't show error, just show empty list
             }
@@ -207,7 +239,7 @@ namespace Web.Controllers
                 // Only log actual unexpected errors - don't show error for empty results
                 var traceId = HttpContext.TraceIdentifier;
                 _logger.LogError(ex, "Unexpected error loading chats. TraceId={TraceId}, UserId={UserId}, ExceptionType={ExceptionType}", 
-                    traceId, userId, ex.GetType().Name);
+                    traceId, finalUserId, ex.GetType().Name);
                 
                 // Only show error for actual critical issues, not for empty results or expected exceptions
                 // Empty results should just show "No chats yet" message
@@ -230,7 +262,7 @@ namespace Web.Controllers
             {
                 try
                 {
-                    selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, userId);
+                    selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, finalUserId);
                     if (selectedChat != null)
                     {
                         messages = await _chatService.GetMessagesAsync(chatId.Value);

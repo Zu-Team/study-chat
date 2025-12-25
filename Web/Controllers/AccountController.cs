@@ -116,18 +116,9 @@ public class AccountController : Controller
 
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, props);
 
-            // Link session to user (update session with UserId) - do in background to avoid blocking redirect
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await LinkSessionToUserAsync(user.Id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Background session linking failed for user {UserId}", user.Id);
-                }
-            });
+            // Link session to user (update session with UserId) - MUST be synchronous
+            // StudyChat/Index checks session.UserId, so it must be set before redirect
+            await LinkSessionToUserAsync(user.Id);
 
             // Best-effort: persist last_login_at and optional password rehash - do in background
             // If UPDATE is blocked by DB policies/RLS, keep the user logged in.

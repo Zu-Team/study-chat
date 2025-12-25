@@ -17,6 +17,7 @@ public class ChatService
     public async Task<List<Chat>> GetChatsForUserAsync(long userId)
     {
         return await _context.Chats
+            .AsNoTracking() // Read-only query - no change tracking needed
             .Where(c => c.UserId == userId)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
@@ -41,6 +42,7 @@ public class ChatService
     public async Task<List<Message>> GetMessagesAsync(long chatId)
     {
         return await _context.Messages
+            .AsNoTracking() // Read-only query - no change tracking needed
             .Where(m => m.ChatId == chatId)
             .OrderBy(m => m.CreatedAt)
             .Include(m => m.Sender)
@@ -50,6 +52,7 @@ public class ChatService
     public async Task<Chat?> GetChatByIdAsync(long chatId, long userId)
     {
         return await _context.Chats
+            .AsNoTracking() // Read-only query - no change tracking needed
             .FirstOrDefaultAsync(c => c.Id == chatId && c.UserId == userId);
     }
 }

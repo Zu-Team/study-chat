@@ -133,11 +133,12 @@ namespace Web.Controllers
                 return RedirectToAction("Login", "Account");
             }
 
-            // Step 3: Look up session in database
+            // Step 3: Look up session in database (use AsNoTracking for read-only query)
             Models.Session? session = null;
             try
             {
                 session = await _dbContext.Sessions
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
             }
             catch (Exception ex)
@@ -266,11 +267,12 @@ namespace Web.Controllers
                 return RedirectToAction("Login", "Account");
             }
 
-            // Step 3: Look up session in database
+            // Step 3: Look up session in database (use AsNoTracking for read-only query)
             Models.Session? session = null;
             try
             {
                 session = await _dbContext.Sessions
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
             }
             catch (Exception ex)

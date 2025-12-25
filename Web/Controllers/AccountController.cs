@@ -453,10 +453,22 @@ public class AccountController : Controller
 
     public async Task<IActionResult> Logout()
     {
-        // Unlink session from user (set UserId to null) before signing out
-        await UnlinkSessionFromUserAsync();
-        
+        // Sign out immediately - don't wait for session unlink
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        
+        // Unlink session from user (set UserId to null) - do in background to avoid blocking redirect
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await UnlinkSessionFromUserAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Background session unlink failed during logout");
+            }
+        });
+        
         return RedirectToAction("Login");
     }
 

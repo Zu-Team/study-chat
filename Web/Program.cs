@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Npgsql;
 using Web.Data;
 using Web.Models;
 using Web.Services;
@@ -42,7 +43,21 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     // Use placeholder during build if connection string is not available
     // This allows the app to build without secrets present
     var connString = connectionString ?? "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
-    options.UseNpgsql(connString);
+    options.UseNpgsql(connString, npgsqlOptions =>
+    {
+        // Enable retry on transient failures
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(5),
+            errorCodesToAdd: null);
+        // Increase command timeout to 30 seconds
+        npgsqlOptions.CommandTimeout(30);
+    });
+    // Enable sensitive data logging in development only
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+    }
 });
 
 // MIGRATION INSTRUCTIONS (run these commands in the Web directory):

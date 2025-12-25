@@ -181,14 +181,39 @@ public class AccountController : Controller
         }
         catch (DbUpdateException ex)
         {
-            _logger.LogError(ex, "Database error while creating local account. TraceId={TraceId}, Email={Email}", traceId, email);
-            ModelState.AddModelError(string.Empty, $"Database error while creating the account. Ref: {traceId}");
+            _logger.LogError(ex, "Database error while creating local account. TraceId={TraceId}, Email={Email}, InnerException={InnerException}", 
+                traceId, email, ex.InnerException?.Message);
+            
+            // Check if it's a transient failure (connection issue)
+            if (ex.InnerException?.Message?.Contains("transient", StringComparison.OrdinalIgnoreCase) == true ||
+                ex.InnerException?.Message?.Contains("timeout", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                ModelState.AddModelError(string.Empty, 
+                    "Unable to connect to the database. Please try again in a few moments. If the problem persists, contact support.");
+            }
+            else
+            {
+                ModelState.AddModelError(string.Empty, $"Database error while creating the account. Ref: {traceId}");
+            }
             return View();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error while creating local account. TraceId={TraceId}, Email={Email}", traceId, email);
-            ModelState.AddModelError(string.Empty, $"Unexpected server error while creating the account. Ref: {traceId}");
+            _logger.LogError(ex, "Unexpected error while creating local account. TraceId={TraceId}, Email={Email}, ExceptionType={ExceptionType}", 
+                traceId, email, ex.GetType().Name);
+            
+            // Check if it's a connection/network issue
+            if (ex.Message.Contains("transient", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("connection", StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(string.Empty, 
+                    "Unable to connect to the database. Please try again in a few moments. If the problem persists, contact support.");
+            }
+            else
+            {
+                ModelState.AddModelError(string.Empty, $"Unexpected server error while creating the account. Ref: {traceId}");
+            }
             return View();
         }
     }
@@ -305,10 +330,21 @@ public class AccountController : Controller
             if (User.Identity?.IsAuthenticated == true)
             {
                 // Link session to user if not already linked (fallback in case OnTicketReceived didn't do it)
+                // Do this in background to avoid blocking the redirect (non-critical operation)
                 var userIdClaim = User.FindFirst("studychat_user_id")?.Value;
                 if (!string.IsNullOrEmpty(userIdClaim) && long.TryParse(userIdClaim, out var userId))
                 {
-                    await LinkSessionToUserAsync(userId);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await LinkSessionToUserAsync(userId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Background session linking failed for user {UserId}", userId);
+                        }
+                    });
                 }
                 return LocalRedirect(returnUrl);
             }
@@ -320,10 +356,21 @@ public class AccountController : Controller
                 HttpContext.User = cookieResult.Principal;
                 
                 // Link session to user if not already linked (fallback in case OnTicketReceived didn't do it)
+                // Do this in background to avoid blocking the redirect (non-critical operation)
                 var userIdClaim = cookieResult.Principal.FindFirst("studychat_user_id")?.Value;
                 if (!string.IsNullOrEmpty(userIdClaim) && long.TryParse(userIdClaim, out var userId))
                 {
-                    await LinkSessionToUserAsync(userId);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await LinkSessionToUserAsync(userId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Background session linking failed for user {UserId}", userId);
+                        }
+                    });
                 }
                 
                 return LocalRedirect(returnUrl);

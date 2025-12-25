@@ -215,8 +215,11 @@ builder.Services.AddAuthentication(options =>
             context.Principal = claimsPrincipal;
             
             // Let the Google handler issue the cookie using our principal + properties.
-            context.Properties.IsPersistent = true;
-            context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+            if (context.Properties != null)
+            {
+                context.Properties.IsPersistent = true;
+                context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+            }
             context.Properties.AllowRefresh = true;
             
             // Don't force a return path here. We honor the RedirectUri set in /Account/GoogleLogin,

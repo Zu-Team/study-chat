@@ -1,10 +1,14 @@
 using System;
+using Microsoft.EntityFrameworkCore;
+using Web.Data;
+using Web.Models;
 
 namespace Web.Middleware;
 
 /// <summary>
 /// Middleware that creates and manages a session ID cookie for first-time visitors.
-/// The session ID is stored in a cookie and can be accessed via HttpContext.Items["SessionId"].
+/// The session ID is stored in a cookie and saved to the database in the visitor_sessions table.
+/// The session ID can be accessed via HttpContext.Items["SessionId"].
 /// </summary>
 public class SessionIdMiddleware
 {
@@ -40,12 +44,62 @@ public class SessionIdMiddleware
             
             // Store in HttpContext.Items for easy access in controllers/views
             context.Items["SessionId"] = sessionId;
+
+            // Save to database (fire and forget - don't block the request)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = context.RequestServices.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    
+                    var visitorSession = new VisitorSession
+                    {
+                        SessionId = sessionId,
+                        IpAddress = context.Connection.RemoteIpAddress?.ToString(),
+                        UserAgent = context.Request.Headers["User-Agent"].ToString(),
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        LastAccessedAt = DateTimeOffset.UtcNow
+                    };
+
+                    dbContext.VisitorSessions.Add(visitorSession);
+                    await dbContext.SaveChangesAsync();
+                }
+                catch
+                {
+                    // Silently fail - don't break the request if DB save fails
+                    // This ensures the cookie is still set even if DB is unavailable
+                }
+            });
         }
         else
         {
             // Session ID already exists, retrieve it for use in controllers
             var existingSessionId = context.Request.Cookies[SessionIdCookieName];
             context.Items["SessionId"] = existingSessionId;
+
+            // Update last accessed time in database (fire and forget)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = context.RequestServices.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    
+                    var visitorSession = await dbContext.VisitorSessions
+                        .FirstOrDefaultAsync(vs => vs.SessionId == existingSessionId);
+                    
+                    if (visitorSession != null)
+                    {
+                        visitorSession.LastAccessedAt = DateTimeOffset.UtcNow;
+                        await dbContext.SaveChangesAsync();
+                    }
+                }
+                catch
+                {
+                    // Silently fail - don't break the request if DB update fails
+                }
+            });
         }
 
         // Continue to the next middleware

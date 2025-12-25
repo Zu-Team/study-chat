@@ -230,35 +230,51 @@ builder.Services.AddAuthentication(options =>
             // Replace the principal in the context so the authentication middleware recognizes the user
             context.Principal = claimsPrincipal;
             
-            // Link session to user (update session with UserId)
+            // Link session to user (update session with UserId) - do in background to avoid blocking OAuth flow
             // Use extension method to get session ID from HttpContext.Items or cookie
             var sessionId = context.HttpContext.GetSessionId();
             if (!string.IsNullOrEmpty(sessionId))
             {
-                try
+                // Capture values before starting background task
+                var capturedSessionId = sessionId;
+                var capturedUserId = user.Id;
+                var capturedServiceProvider = serviceProvider;
+                
+                _ = Task.Run(async () =>
                 {
-                    using var dbScope = serviceProvider.CreateScope();
-                    var dbContext = dbScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    var session = await dbContext.Sessions
-                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                    
-                    if (session != null)
+                    try
                     {
-                        session.UserId = user.Id;
-                        session.LastAccessedAt = DateTimeOffset.UtcNow;
-                        await dbContext.SaveChangesAsync();
-                        logger.LogInformation("Linked session {SessionId} to user {UserId} during Google auth", sessionId, user.Id);
+                        using var dbScope = capturedServiceProvider.CreateScope();
+                        var dbContext = dbScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        var backgroundLogger = dbScope.ServiceProvider.GetService<ILogger<Program>>();
+                        
+                        var session = await dbContext.Sessions
+                            .FirstOrDefaultAsync(s => s.SessionId == capturedSessionId);
+                        
+                        if (session != null)
+                        {
+                            session.UserId = capturedUserId;
+                            session.LastAccessedAt = DateTimeOffset.UtcNow;
+                            await dbContext.SaveChangesAsync();
+                            backgroundLogger?.LogInformation("Linked session {SessionId} to user {UserId} during Google auth", capturedSessionId, capturedUserId);
+                        }
+                        else
+                        {
+                            backgroundLogger?.LogWarning("Session {SessionId} not found in database during Google auth linking", capturedSessionId);
+                        }
                     }
-                    else
+                    catch (Exception sessionEx)
                     {
-                        logger.LogWarning("Session {SessionId} not found in database during Google auth linking", sessionId);
+                        // Log but don't fail - session linking is not critical
+                        try
+                        {
+                            using var errorScope = capturedServiceProvider.CreateScope();
+                            var errorLogger = errorScope.ServiceProvider.GetService<ILogger<Program>>();
+                            errorLogger?.LogError(sessionEx, "Failed to link session {SessionId} to user {UserId} during Google auth", capturedSessionId, capturedUserId);
+                        }
+                        catch { }
                     }
-                }
-                catch (Exception sessionEx)
-                {
-                    // Log but don't fail - session linking is not critical
-                    logger.LogError(sessionEx, "Failed to link session {SessionId} to user {UserId} during Google auth", sessionId, user.Id);
-                }
+                });
             }
             else
             {

@@ -54,28 +54,39 @@ public class SessionIdMiddleware
                     var ipAddress = context.Connection.RemoteIpAddress?.ToString();
                     var userAgent = context.Request.Headers["User-Agent"].ToString();
                     
-                    // Try to find a recent anonymous session (UserId is null) with matching IP/UserAgent
-                    // Created within the last 10 minutes to account for OAuth redirect time
+                    // Try to find a recent anonymous session (UserId is null) with matching UserAgent
+                    // Created within the last 15 minutes to account for OAuth redirect time
+                    // Use UserAgent as primary match (more reliable than IP which can change)
                     var recentSession = await dbContext.Sessions
                         .Where(s => s.UserId == null && 
-                                    s.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-10) &&
-                                    (string.IsNullOrEmpty(ipAddress) || s.IpAddress == ipAddress) &&
-                                    (string.IsNullOrEmpty(userAgent) || s.UserAgent == userAgent))
+                                    s.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-15))
                         .OrderByDescending(s => s.CreatedAt)
-                        .FirstOrDefaultAsync();
+                        .ToListAsync(); // Get all recent sessions, then filter in memory
                     
-                    if (recentSession != null)
+                    // Find best match: prefer exact UserAgent match, then any recent session
+                    var matchedSession = recentSession
+                        .FirstOrDefault(s => !string.IsNullOrEmpty(userAgent) && 
+                                           !string.IsNullOrEmpty(s.UserAgent) && 
+                                           s.UserAgent == userAgent) 
+                        ?? recentSession.FirstOrDefault(); // Fallback to most recent if no UserAgent match
+                    
+                    if (matchedSession != null)
                     {
-                        sessionId = recentSession.SessionId;
+                        sessionId = matchedSession.SessionId;
                         reusedExistingSession = true;
-                        logger?.LogInformation("Reusing existing session {SessionId} for OAuth callback from IP {IpAddress}", sessionId, ipAddress);
+                        logger?.LogInformation("Reusing existing session {SessionId} for OAuth callback from IP {IpAddress}, UserAgent match: {UserAgentMatch}", 
+                            sessionId, ipAddress, !string.IsNullOrEmpty(userAgent) && matchedSession.UserAgent == userAgent);
+                    }
+                    else
+                    {
+                        logger?.LogDebug("No recent anonymous session found for OAuth callback. Will create new one. Recent sessions count: {Count}", recentSession.Count);
                     }
                 }
                 catch (Exception ex)
                 {
                     // If lookup fails, we'll create a new session below
                     var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                    logger?.LogWarning(ex, "Failed to lookup existing session for OAuth callback, will create new one");
+                    logger?.LogWarning(ex, "Failed to lookup existing session for OAuth callback, will create new one. Error: {Error}", ex.Message);
                 }
             }
             

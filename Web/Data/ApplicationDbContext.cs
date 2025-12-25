@@ -14,7 +14,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<Chat> Chats { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<Session> Sessions { get; set; }
-    public DbSet<VisitorSession> VisitorSessions { get; set; }
     public DbSet<ChatSummary> ChatSummaries { get; set; }
     public DbSet<ChatQuiz> ChatQuizzes { get; set; }
 
@@ -66,22 +65,13 @@ public class ApplicationDbContext : DbContext
         // Session configuration
         modelBuilder.Entity<Session>(entity =>
         {
-            entity.HasOne(s => s.User)
-                .WithMany(u => u.Sessions)
-                .HasForeignKey(s => s.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // VisitorSession configuration
-        modelBuilder.Entity<VisitorSession>(entity =>
-        {
             entity.HasIndex(e => e.SessionId).IsUnique();
             entity.HasIndex(e => e.UserId);
             
-            entity.HasOne(vs => vs.User)
-                .WithMany()
-                .HasForeignKey(vs => vs.UserId)
-                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(s => s.User)
+                .WithMany(u => u.Sessions)
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.SetNull); // Set null on user delete, not cascade
         });
 
         // ChatSummary configuration

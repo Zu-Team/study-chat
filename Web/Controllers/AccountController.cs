@@ -9,18 +9,23 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Web.Services;
+using Web.Data;
+using Web.Models;
 
 namespace Web.Controllers;
 
 public class AccountController : Controller
 {
     private readonly UserService _userService;
+    private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<AccountController> _logger;
     private readonly IConfiguration _configuration;
+    private const string SessionIdCookieName = "studychat_session_id";
 
-    public AccountController(UserService userService, ILogger<AccountController> logger, IConfiguration configuration)
+    public AccountController(UserService userService, ApplicationDbContext dbContext, ILogger<AccountController> logger, IConfiguration configuration)
     {
         _userService = userService;
+        _dbContext = dbContext;
         _logger = logger;
         _configuration = configuration;
     }
@@ -114,6 +119,9 @@ public class AccountController : Controller
             }
 
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, props);
+
+            // Link session to user (update session with UserId)
+            await LinkSessionToUserAsync(user.Id);
 
             // Best-effort: persist last_login_at and optional password rehash.
             // If UPDATE is blocked by DB policies/RLS, keep the user logged in.
@@ -367,8 +375,71 @@ public class AccountController : Controller
 
     public async Task<IActionResult> Logout()
     {
+        // Unlink session from user (set UserId to null) before signing out
+        await UnlinkSessionFromUserAsync();
+        
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction("Login");
+    }
+
+    /// <summary>
+    /// Links the current session (from cookie) to the authenticated user.
+    /// This is called after successful login to associate the session with the user.
+    /// </summary>
+    private async Task LinkSessionToUserAsync(long userId)
+    {
+        try
+        {
+            var sessionId = Request.Cookies[SessionIdCookieName];
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                var session = await _dbContext.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                
+                if (session != null)
+                {
+                    session.UserId = userId;
+                    session.LastAccessedAt = DateTimeOffset.UtcNow;
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation("Linked session {SessionId} to user {UserId}", sessionId, userId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail - session linking is not critical
+            _logger.LogWarning(ex, "Failed to link session to user {UserId}", userId);
+        }
+    }
+
+    /// <summary>
+    /// Unlinks the current session from the user (sets UserId to null).
+    /// This is called during logout.
+    /// </summary>
+    private async Task UnlinkSessionFromUserAsync()
+    {
+        try
+        {
+            var sessionId = Request.Cookies[SessionIdCookieName];
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                var session = await _dbContext.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                
+                if (session != null)
+                {
+                    session.UserId = null;
+                    session.LastAccessedAt = DateTimeOffset.UtcNow;
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation("Unlinked session {SessionId} from user", sessionId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail - session unlinking is not critical
+            _logger.LogWarning(ex, "Failed to unlink session from user");
+        }
     }
 }
 

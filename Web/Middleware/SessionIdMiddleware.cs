@@ -7,7 +7,8 @@ namespace Web.Middleware;
 
 /// <summary>
 /// Middleware that creates and manages a session ID cookie for first-time visitors.
-/// The session ID is stored in a cookie and saved to the database in the visitor_sessions table.
+/// The session ID is stored in a cookie and saved to the database in the sessions table.
+/// Before login: UserId is null. After login: UserId is set to the authenticated user's ID.
 /// The session ID can be accessed via HttpContext.Items["SessionId"].
 /// </summary>
 public class SessionIdMiddleware
@@ -53,16 +54,18 @@ public class SessionIdMiddleware
                     using var scope = context.RequestServices.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     
-                    var visitorSession = new VisitorSession
+                    var session = new Session
                     {
                         SessionId = sessionId,
+                        UserId = null, // Null before login
+                        Title = null, // Anonymous session, no title needed
                         IpAddress = context.Connection.RemoteIpAddress?.ToString(),
                         UserAgent = context.Request.Headers["User-Agent"].ToString(),
                         CreatedAt = DateTimeOffset.UtcNow,
                         LastAccessedAt = DateTimeOffset.UtcNow
                     };
 
-                    dbContext.VisitorSessions.Add(visitorSession);
+                    dbContext.Sessions.Add(session);
                     await dbContext.SaveChangesAsync();
                 }
                 catch
@@ -86,12 +89,12 @@ public class SessionIdMiddleware
                     using var scope = context.RequestServices.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     
-                    var visitorSession = await dbContext.VisitorSessions
-                        .FirstOrDefaultAsync(vs => vs.SessionId == existingSessionId);
+                    var session = await dbContext.Sessions
+                        .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
                     
-                    if (visitorSession != null)
+                    if (session != null)
                     {
-                        visitorSession.LastAccessedAt = DateTimeOffset.UtcNow;
+                        session.LastAccessedAt = DateTimeOffset.UtcNow;
                         await dbContext.SaveChangesAsync();
                     }
                 }

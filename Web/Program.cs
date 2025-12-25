@@ -215,6 +215,32 @@ builder.Services.AddAuthentication(options =>
             // Replace the principal in the context so the authentication middleware recognizes the user
             context.Principal = claimsPrincipal;
             
+            // Link session to user (update session with UserId)
+            var sessionId = context.HttpContext.Request.Cookies["studychat_session_id"];
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                try
+                {
+                    using var dbScope = serviceProvider.CreateScope();
+                    var dbContext = dbScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var session = await dbContext.Sessions
+                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                    
+                    if (session != null)
+                    {
+                        session.UserId = user.Id;
+                        session.LastAccessedAt = DateTimeOffset.UtcNow;
+                        await dbContext.SaveChangesAsync();
+                        logger.LogInformation("Linked session {SessionId} to user {UserId} during Google auth", sessionId, user.Id);
+                    }
+                }
+                catch (Exception sessionEx)
+                {
+                    // Log but don't fail - session linking is not critical
+                    logger.LogWarning(sessionEx, "Failed to link session to user during Google auth");
+                }
+            }
+            
             // Let the Google handler issue the cookie using our principal + properties.
             if (context.Properties != null)
             {
@@ -331,6 +357,9 @@ app.UseMiddleware<SessionIdMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseRouting();
+
+// Session-based authentication middleware - authenticates user based on session ID
+app.UseMiddleware<SessionAuthenticationMiddleware>();
 
 // Authentication & Authorization middleware
 app.UseAuthentication();

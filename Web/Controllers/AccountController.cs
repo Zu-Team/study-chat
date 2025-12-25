@@ -453,21 +453,34 @@ public class AccountController : Controller
 
     public async Task<IActionResult> Logout()
     {
+        // Capture session ID before signing out (HttpContext might be disposed in background task)
+        var sessionId = HttpContext.GetSessionId();
+        var serviceProvider = HttpContext.RequestServices;
+        
         // Sign out immediately - don't wait for session unlink
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         
         // Unlink session from user (set UserId to null) - do in background to avoid blocking redirect
-        _ = Task.Run(async () =>
+        if (!string.IsNullOrEmpty(sessionId))
         {
-            try
+            _ = Task.Run(async () =>
             {
-                await UnlinkSessionFromUserAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Background session unlink failed during logout");
-            }
-        });
+                try
+                {
+                    await UnlinkSessionFromUserAsync(sessionId, serviceProvider);
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        using var errorScope = serviceProvider.CreateScope();
+                        var logger = errorScope.ServiceProvider.GetService<ILogger<AccountController>>();
+                        logger?.LogWarning(ex, "Background session unlink failed during logout. SessionId={SessionId}", sessionId);
+                    }
+                    catch { }
+                }
+            });
+        }
         
         return RedirectToAction("Login");
     }
@@ -507,29 +520,40 @@ public class AccountController : Controller
     /// Unlinks the current session from the user (sets UserId to null).
     /// This is called during logout.
     /// </summary>
-    private async Task UnlinkSessionFromUserAsync()
+    private async Task UnlinkSessionFromUserAsync(string sessionId, IServiceProvider serviceProvider)
     {
         try
         {
-            var sessionId = Request.Cookies[SessionIdCookieName];
-            if (!string.IsNullOrEmpty(sessionId))
+            using var scope = serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var logger = scope.ServiceProvider.GetService<ILogger<AccountController>>();
+            
+            var session = await dbContext.Sessions
+                .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            
+            if (session != null)
             {
-                var session = await _dbContext.Sessions
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                
-                if (session != null)
-                {
-                    session.UserId = null;
-                    session.LastAccessedAt = DateTimeOffset.UtcNow;
-                    await _dbContext.SaveChangesAsync();
-                    _logger.LogInformation("Unlinked session {SessionId} from user", sessionId);
-                }
+                session.UserId = null;
+                session.LastAccessedAt = DateTimeOffset.UtcNow;
+                session.EndedAt = DateTimeOffset.UtcNow; // Mark session as ended
+                await dbContext.SaveChangesAsync();
+                logger?.LogInformation("Unlinked session {SessionId} from user", sessionId);
+            }
+            else
+            {
+                logger?.LogWarning("Session {SessionId} not found in database during logout", sessionId);
             }
         }
         catch (Exception ex)
         {
             // Log but don't fail - session unlinking is not critical
-            _logger.LogWarning(ex, "Failed to unlink session from user");
+            try
+            {
+                using var errorScope = serviceProvider.CreateScope();
+                var logger = errorScope.ServiceProvider.GetService<ILogger<AccountController>>();
+                logger?.LogWarning(ex, "Failed to unlink session {SessionId} from user", sessionId);
+            }
+            catch { }
         }
     }
 }

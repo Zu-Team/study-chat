@@ -74,28 +74,19 @@ public class UserService
 
         try
         {
-            // 1. Try to find by google_sub
+            // Optimize: Try to find by google_sub OR email in a single query (faster than 2 separate queries)
             user = await _context.Users
-                .FirstOrDefaultAsync(u => u.GoogleSub == googleSub);
+                .FirstOrDefaultAsync(u => u.GoogleSub == googleSub || u.Email == email);
 
             if (user != null)
             {
-                // Update last login
-                user.LastLoginAt = now;
-                user.EmailVerified = true;
-                await _context.SaveChangesAsync();
-                return user;
-            }
-
-            // 2. Try to find by email
-            user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == email);
-
-            if (user != null)
-            {
-                // Update existing user with Google info
-                user.GoogleSub = googleSub;
-                user.AuthProvider = "google";
+                // Update user with Google info
+                if (user.GoogleSub != googleSub)
+                {
+                    // User exists by email but doesn't have GoogleSub - link it
+                    user.GoogleSub = googleSub;
+                    user.AuthProvider = "google";
+                }
                 user.EmailVerified = true;
                 user.LastLoginAt = now;
                 if (string.IsNullOrEmpty(user.FullName) && !string.IsNullOrEmpty(name))
@@ -106,7 +97,7 @@ public class UserService
                 return user;
             }
 
-            // 3. Create new user (Id will be auto-generated)
+            // Create new user (Id will be auto-generated)
             user = new User
             {
                 FullName = name,

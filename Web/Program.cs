@@ -289,6 +289,27 @@ builder.Services.AddAuthentication(options =>
                 context.Properties.AllowRefresh = true;
             }
             
+            // IMPORTANT: Explicitly sign in the user here to ensure the cookie is set
+            // This ensures the user is authenticated even if the redirect happens before background tasks complete
+            try
+            {
+                await context.HttpContext.SignInAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    claimsPrincipal,
+                    context.Properties ?? new AuthenticationProperties
+                    {
+                        IsPersistent = true,
+                        ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+                        AllowRefresh = true
+                    });
+                logger.LogInformation("Explicitly signed in user {UserId} via cookie during Google auth", user.Id);
+            }
+            catch (Exception signInEx)
+            {
+                logger.LogWarning(signInEx, "Failed to explicitly sign in user during Google auth, but principal is set");
+                // Don't fail - the principal is already set, cookie auth middleware should handle it
+            }
+            
             // Don't force a return path here. We honor the RedirectUri set in /Account/GoogleLogin,
             // which routes through /Account/GoogleCallback (and preserves any returnUrl).
             logger.LogInformation(

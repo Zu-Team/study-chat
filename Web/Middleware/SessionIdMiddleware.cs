@@ -144,23 +144,23 @@ public class SessionIdMiddleware
                             await dbContext.SaveChangesAsync();
                         }
                     }
-                catch (Exception ex)
-                {
-                    // Log error but don't break the request - cookie is still set
-                    // Common error: column "session_id" does not exist - run migration SQL
-                    try
+                    catch (Exception ex)
                     {
-                        using var errorScope = context.RequestServices.CreateScope();
-                        var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                        logger?.LogWarning(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
-                            "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
+                        // Log error but don't break the request - cookie is still set
+                        // Common error: column "session_id" does not exist - run migration SQL
+                        try
+                        {
+                            using var errorScope = context.RequestServices.CreateScope();
+                            var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                            logger?.LogWarning(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
+                                "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
+                        }
+                        catch
+                        {
+                            // If logging fails, ignore - don't break the request
+                        }
                     }
-                    catch
-                    {
-                        // If logging fails, ignore - don't break the request
-                    }
-                }
-            });
+                });
         }
         else
         {

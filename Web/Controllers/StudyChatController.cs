@@ -168,11 +168,11 @@ namespace Web.Controllers
             // Load all chats for sidebar using user_id from session
             // Initialize with empty list - if there are no chats, that's fine, not an error
             ViewBag.Chats = new List<Models.Chat>();
-            ViewBag.UserId = userId.Value; // Pass user ID to view for debugging if needed
+            ViewBag.UserId = userId; // Pass user ID to view for debugging if needed
             
             try
             {
-                var chats = await _chatService.GetChatsForUserAsync(userId.Value);
+                var chats = await _chatService.GetChatsForUserAsync(userId);
                 ViewBag.Chats = chats ?? new List<Models.Chat>();
                 // No chats is normal - don't show error, just show empty list
             }
@@ -206,7 +206,7 @@ namespace Web.Controllers
                 // Only log actual unexpected errors - don't show error for empty results
                 var traceId = HttpContext.TraceIdentifier;
                 _logger.LogError(ex, "Unexpected error loading chats. TraceId={TraceId}, UserId={UserId}, ExceptionType={ExceptionType}", 
-                    traceId, userId.Value, ex.GetType().Name);
+                    traceId, userId, ex.GetType().Name);
                 
                 // Only show error for actual critical issues, not for empty results or expected exceptions
                 // Empty results should just show "No chats yet" message
@@ -229,7 +229,7 @@ namespace Web.Controllers
             {
                 try
                 {
-                    selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, userId.Value);
+                    selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, userId);
                     if (selectedChat != null)
                     {
                         messages = await _chatService.GetMessagesAsync(chatId.Value);
@@ -301,7 +301,7 @@ namespace Web.Controllers
             Models.Chat newChat;
             try
             {
-                newChat = await _chatService.CreateNewChatAsync(userId.Value, chatName);
+                newChat = await _chatService.CreateNewChatAsync(userId, chatName);
             }
             catch (Exception ex)
             {

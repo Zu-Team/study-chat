@@ -360,8 +360,19 @@
                     }
                 } catch (error) {
                     console.error('Error sending message:', error);
+                    
+                    // Try to get more detailed error message
+                    let errorMessage = 'Sorry, I encountered an error. Please try again.';
+                    try {
+                        if (error.message) {
+                            errorMessage = `Error: ${error.message}`;
+                        }
+                    } catch (e) {
+                        // Use default message
+                    }
+                    
                     // Show error message
-                    addMessageToChat('Sorry, I encountered an error. Please try again.', false);
+                    addMessageToChat(errorMessage, false);
                 } finally {
                     // Re-enable form
                     if (sendButton) {

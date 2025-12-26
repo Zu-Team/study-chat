@@ -96,7 +96,24 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 
 // Register HttpClient for AI webhook calls
-builder.Services.AddHttpClient();
+// Configure to handle self-signed certificates in development
+builder.Services.AddHttpClient("AiWebhook", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+}).ConfigurePrimaryHttpMessageHandler(() =>
+{
+    var handler = new HttpClientHandler();
+    
+    // In development, allow self-signed certificates (for testing webhooks)
+    // WARNING: This is insecure and should only be used in development
+    if (builder.Environment.IsDevelopment())
+    {
+        handler.ServerCertificateCustomValidationCallback = 
+            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    }
+    
+    return handler;
+});
 
 // ============================================
 // AUTHENTICATION CONFIGURATION

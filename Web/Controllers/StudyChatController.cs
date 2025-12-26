@@ -32,8 +32,8 @@ namespace Web.Controllers
             _dbContext = dbContext;
             _logger = logger;
             _configuration = configuration;
-            _httpClient = httpClientFactory.CreateClient();
-            _httpClient.Timeout = TimeSpan.FromSeconds(60); // 60 second timeout for AI responses
+            // Use named HttpClient configured in Program.cs (handles SSL in development)
+            _httpClient = httpClientFactory.CreateClient("AiWebhook");
         }
 
         /// <summary>
@@ -455,12 +455,28 @@ namespace Web.Controllers
             catch (TaskCanceledException ex)
             {
                 _logger.LogError(ex, "AI webhook request timed out. TraceId={TraceId}", traceId);
-                return StatusCode(504, new { error = "AI service request timed out. Please try again." });
+                return StatusCode(504, new { error = "AI service request timed out. Please try again.", traceId });
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "HTTP error calling AI webhook. TraceId={TraceId}, Message={Message}, InnerException={InnerException}", 
+                    traceId, ex.Message, ex.InnerException?.Message);
+                
+                // Check if it's an SSL certificate error
+                if (ex.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase) || 
+                    ex.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
+                    ex.InnerException?.Message?.Contains("certificate", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return StatusCode(500, new { error = "SSL certificate validation failed. Please check webhook certificate.", traceId });
+                }
+                
+                return StatusCode(500, new { error = $"Failed to connect to AI service: {ex.Message}", traceId });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending message to AI webhook. TraceId={TraceId}", traceId);
-                return StatusCode(500, new { error = "Failed to get AI response. Please try again.", traceId });
+                _logger.LogError(ex, "Error sending message to AI webhook. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}", 
+                    traceId, ex.GetType().Name, ex.Message);
+                return StatusCode(500, new { error = $"Failed to get AI response: {ex.Message}", traceId });
             }
         }
     }

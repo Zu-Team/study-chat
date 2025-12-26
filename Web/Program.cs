@@ -43,15 +43,32 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     // Use placeholder during build if connection string is not available
     // This allows the app to build without secrets present
     var connString = connectionString ?? "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
-    options.UseNpgsql(connString, npgsqlOptions =>
+    
+    // Optimize connection string for Azure/Supabase performance
+    // Build optimized connection string with pooling parameters
+    var connBuilder = new NpgsqlConnectionStringBuilder(connString);
+    
+    // Connection pooling settings for better performance
+    connBuilder.Pooling = true;
+    connBuilder.MinPoolSize = 5; // Keep minimum connections ready
+    connBuilder.MaxPoolSize = 100; // Allow up to 100 concurrent connections
+    connBuilder.ConnectionLifetime = 0; // Don't recycle connections (0 = disabled)
+    connBuilder.Timeout = 15; // Connection timeout in seconds (reduced from default 30)
+    connBuilder.CommandTimeout = 15; // Command timeout in seconds
+    
+    // Additional performance optimizations
+    connBuilder.NoResetOnClose = true; // Don't reset connection state on close (faster)
+    connBuilder.TcpKeepAlive = true; // Keep connections alive
+    
+    options.UseNpgsql(connBuilder.ConnectionString, npgsqlOptions =>
     {
-        // Enable retry on transient failures
+        // Enable retry on transient failures (reduced retries for faster failure detection)
         npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 3,
-            maxRetryDelay: TimeSpan.FromSeconds(5),
+            maxRetryCount: 2, // Reduced from 3 to 2 for faster failure
+            maxRetryDelay: TimeSpan.FromSeconds(2), // Reduced from 5 to 2 seconds
             errorCodesToAdd: null);
-        // Increase command timeout to 30 seconds
-        npgsqlOptions.CommandTimeout(30);
+        // Command timeout is set in connection string, but also set here for consistency
+        npgsqlOptions.CommandTimeout(15);
     });
     // Enable sensitive data logging in development only
     if (builder.Environment.IsDevelopment())

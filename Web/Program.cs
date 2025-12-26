@@ -76,13 +76,21 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     // Use the connection string we determined above (either from config or constructed from Supabase)
     var connString = connectionString;
     
-    // Final check: if connection string is still invalid, use a safe placeholder
+    // Final check: if connection string is still invalid, log error but use a connection string that will fail gracefully
+    // This allows the app to start, but database operations will fail with clear error messages
     if (string.IsNullOrWhiteSpace(connString) || 
         connString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
         connString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
     {
-        // Use a safe placeholder that won't cause connection attempts
-        connString = "Host=localhost;Port=5432;Database=placeholder;Username=placeholder;Password=placeholder";
+        // Use a connection string that will fail immediately with a clear error
+        // This is better than using a placeholder that might cause timeouts
+        // The error will be caught by middleware and logged clearly
+        connString = "Host=INVALID_CONNECTION_STRING;Port=5432;Database=postgres;Username=postgres;Password=NOT_CONFIGURED";
+        
+        var tempLogger = LoggerFactory.Create(loggingBuilder => loggingBuilder.AddConsole()).CreateLogger<Program>();
+        tempLogger.LogError("❌ DATABASE CONNECTION STRING IS INVALID! " +
+            "The app will start but all database operations will fail. " +
+            "Please configure in Azure App Settings: ConnectionStrings__DefaultConnection or Supabase__DbPassword");
     }
     
     // Optimize connection string for Azure/Supabase performance

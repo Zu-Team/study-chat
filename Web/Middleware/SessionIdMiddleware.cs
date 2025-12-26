@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Web.Data;
 using Web.Models;
 
@@ -167,12 +168,30 @@ public class SessionIdMiddleware
                         logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", sessionId);
                     }
                 }
+                catch (Npgsql.NpgsqlException dbEx)
+                {
+                    // Database connection errors - log but don't break the request
+                    var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
+                    logger?.LogWarning(dbEx, "Database connection error while saving session. SessionId={SessionId}, Error={Error}. " +
+                        "This may indicate the connection string is not configured correctly in Azure App Settings.", 
+                        sessionId, dbEx.Message);
+                    // Continue - session ID is still set in cookie, just not saved to DB
+                }
+                catch (Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx)
+                {
+                    // Database update errors - log but don't break the request
+                    var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
+                    logger?.LogWarning(dbUpdateEx, "Database update error while saving session. SessionId={SessionId}, Error={Error}", 
+                        sessionId, dbUpdateEx.Message);
+                    // Continue - session ID is still set in cookie
+                }
                 catch (Exception ex)
                 {
-                    // Log error but don't break the request - cookie is still set
+                    // Any other errors - log but don't break the request
                     var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                    logger?.LogError(ex, "Failed to save session to database. SessionId={SessionId}. Error: {Message}. " +
+                    logger?.LogError(ex, "Unexpected error while saving session to database. SessionId={SessionId}, Error={Error}. " +
                         "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
+                    // Continue - session ID is still set in cookie
                 }
             }
         }
@@ -216,14 +235,39 @@ public class SessionIdMiddleware
                         logger?.LogWarning("Session {SessionId} not found in database when updating LastAccessedAt.", existingSessionId);
                     }
                 }
-                catch (Exception ex)
+                catch (Npgsql.NpgsqlException dbEx)
                 {
-                    // Log error but don't break the request
+                    // Database connection errors - log but don't break the request
                     try
                     {
                         using var errorScope = context.RequestServices.CreateScope();
                         var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
-                        logger?.LogError(ex, "Failed to update session last accessed time. SessionId={SessionId}", existingSessionId);
+                        logger?.LogWarning(dbEx, "Database connection error while updating session. SessionId={SessionId}, Error={Error}", 
+                            existingSessionId, dbEx.Message);
+                    }
+                    catch { }
+                }
+                catch (Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx)
+                {
+                    // Database update errors - log but don't break the request
+                    try
+                    {
+                        using var errorScope = context.RequestServices.CreateScope();
+                        var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                        logger?.LogWarning(dbUpdateEx, "Database update error while updating session. SessionId={SessionId}, Error={Error}", 
+                            existingSessionId, dbUpdateEx.Message);
+                    }
+                    catch { }
+                }
+                catch (Exception ex)
+                {
+                    // Any other errors - log but don't break the request
+                    try
+                    {
+                        using var errorScope = context.RequestServices.CreateScope();
+                        var logger = errorScope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
+                        logger?.LogError(ex, "Unexpected error while updating session last accessed time. SessionId={SessionId}, Error={Error}", 
+                            existingSessionId, ex.Message);
                     }
                     catch { }
                 }

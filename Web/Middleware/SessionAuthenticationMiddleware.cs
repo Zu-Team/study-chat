@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Web.Data;
 using Web.Models;
 
@@ -50,6 +51,7 @@ public class SessionAuthenticationMiddleware
         {
             using var scope = context.RequestServices.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var logger = scope.ServiceProvider.GetService<ILogger<SessionAuthenticationMiddleware>>();
             
             // OPTIMIZATION: Use projection with explicit join to fetch only needed fields
             // This avoids loading the entire User entity and reduces query complexity
@@ -91,16 +93,37 @@ public class SessionAuthenticationMiddleware
                 };
 
                 await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
+                logger?.LogDebug("User {UserId} authenticated via session {SessionId}", sessionData.UserId, sessionId);
             }
         }
-        catch
+        catch (Npgsql.NpgsqlException dbEx)
         {
-            // Silently fail - don't break the request if authentication fails
-            // User will need to log in again
+            // Database connection errors - log but don't break the request
+            var logger = context.RequestServices.GetService<ILogger<SessionAuthenticationMiddleware>>();
+            logger?.LogWarning(dbEx, "Database connection error during session authentication. SessionId={SessionId}, Error={Error}", 
+                sessionId, dbEx.Message);
+            // Continue - user will need to log in again if database is unavailable
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx)
+        {
+            // Database update errors - log but don't break the request
+            var logger = context.RequestServices.GetService<ILogger<SessionAuthenticationMiddleware>>();
+            logger?.LogWarning(dbUpdateEx, "Database error during session authentication. SessionId={SessionId}, Error={Error}", 
+                sessionId, dbUpdateEx.Message);
+            // Continue - user will need to log in again
+        }
+        catch (Exception ex)
+        {
+            // Any other errors - log but don't break the request
+            var logger = context.RequestServices.GetService<ILogger<SessionAuthenticationMiddleware>>();
+            logger?.LogError(ex, "Unexpected error during session authentication. SessionId={SessionId}, Error={Error}", 
+                sessionId, ex.Message);
+            // Continue - user will need to log in again
         }
 
         // Continue to the next middleware
         await _next(context);
     }
 }
+
 

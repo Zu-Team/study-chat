@@ -152,7 +152,26 @@
                     {
                         @foreach (var message in messages)
                         {
-                            var isUserMessage = message.SenderId.HasValue && message.SenderId.ToString() == userId;
+                            // Check if message is from the current user
+                            // userId is a string from claims, message.SenderId is a long?
+                            // Convert both to strings for comparison, or compare as numbers
+                            var isUserMessage = false;
+                            if (message.SenderId.HasValue && !string.IsNullOrEmpty(userId))
+                            {
+                                // Try to parse userId as long and compare, or compare as strings
+                                if (long.TryParse(userId, out var userIdLong))
+                                {
+                                    isUserMessage = message.SenderId.Value == userIdLong;
+                                }
+                                else
+                                {
+                                    // Fallback to string comparison
+                                    isUserMessage = message.SenderId.Value.ToString() == userId;
+                                }
+                            }
+                            // If SenderId is null, it's an AI message (assistant)
+                            // If SenderId is 1 (AI user), it's also an AI message
+                            // Only messages with SenderId matching current user are user messages
                             <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
                                 <div class="message-bubble">
                                     @Html.Raw(message.Content.Replace("\n", "<br/>"))

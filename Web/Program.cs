@@ -40,22 +40,20 @@ if (!string.IsNullOrWhiteSpace(home))
 // 3. appsettings.json: ConnectionStrings:DefaultConnection (lowest priority, not recommended for secrets)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Validate connection string
+// Validate connection string - log warning but don't prevent app startup
+// This allows the app to start even if connection string is temporarily missing
+// The middleware will handle database errors gracefully
 if (string.IsNullOrWhiteSpace(connectionString) || 
     connectionString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
     connectionString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
 {
-    var logger = builder.Services.BuildServiceProvider().GetService<ILogger<Program>>();
-    logger?.LogCritical("DATABASE CONNECTION STRING IS NOT CONFIGURED! Please set ConnectionStrings__DefaultConnection environment variable in Azure App Settings.");
-    
-    // In production, we should fail fast if connection string is missing
-    if (!builder.Environment.IsDevelopment())
-    {
-        throw new InvalidOperationException(
-            "Database connection string is not configured. " +
-            "Please set the 'ConnectionStrings__DefaultConnection' environment variable in Azure App Settings. " +
-            "The connection string should be in format: Host=db.xxx.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD");
-    }
+    // Log warning but don't throw - let the app start and handle errors gracefully
+    // This prevents the app from crashing if connection string is temporarily unavailable
+    var tempLogger = LoggerFactory.Create(loggingBuilder => loggingBuilder.AddConsole()).CreateLogger<Program>();
+    tempLogger.LogWarning("DATABASE CONNECTION STRING IS NOT CONFIGURED! " +
+        "Please set ConnectionStrings__DefaultConnection environment variable in Azure App Settings. " +
+        "The app will continue to start, but database operations will fail. " +
+        "Format: Host=db.xxx.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD");
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

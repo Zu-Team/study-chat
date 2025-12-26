@@ -346,28 +346,15 @@ namespace Web.Controllers
             {
                 try
                 {
-                    // SECURITY: Verify chat belongs to current user using session-based authorization
+                    // Authorization already verified above - safe to load chat
                     selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, finalUserId);
                     
-                    if (selectedChat == null)
+                    // Defense in depth: Double-check (should never fail if authorization above worked)
+                    if (selectedChat == null || selectedChat.UserId != finalUserId)
                     {
-                        // Chat doesn't exist or doesn't belong to this user - unauthorized access attempt
                         var traceId = HttpContext.TraceIdentifier;
-                        _logger.LogWarning("Unauthorized chat access attempt. UserId={UserId}, ChatId={ChatId}, TraceId={TraceId}", 
+                        _logger.LogError("SECURITY VIOLATION: Chat authorization check failed after initial verification! UserId={UserId}, ChatId={ChatId}, TraceId={TraceId}", 
                             finalUserId, chatId.Value, traceId);
-                        
-                        // Redirect to study page without chatId (shows user's own chats only)
-                        return RedirectToAction("Index", "StudyChat");
-                    }
-                    
-                    // Additional security check: Verify chat.UserId matches current user
-                    if (selectedChat.UserId != finalUserId)
-                    {
-                        var traceId = HttpContext.TraceIdentifier;
-                        _logger.LogWarning("Chat ownership mismatch detected. ChatUserId={ChatUserId}, CurrentUserId={CurrentUserId}, ChatId={ChatId}, TraceId={TraceId}", 
-                            selectedChat.UserId, finalUserId, chatId.Value, traceId);
-                        
-                        // Redirect to study page without chatId (shows user's own chats only)
                         return RedirectToAction("Index", "StudyChat");
                     }
                     

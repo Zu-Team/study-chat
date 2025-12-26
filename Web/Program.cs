@@ -39,10 +39,28 @@ if (!string.IsNullOrWhiteSpace(home))
 // 2. User Secrets (Development only): ConnectionStrings:DefaultConnection
 // 3. appsettings.json: ConnectionStrings:DefaultConnection (lowest priority, not recommended for secrets)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// Validate connection string
+if (string.IsNullOrWhiteSpace(connectionString) || 
+    connectionString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
+    connectionString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
+{
+    var logger = builder.Services.BuildServiceProvider().GetService<ILogger<Program>>();
+    logger?.LogCritical("DATABASE CONNECTION STRING IS NOT CONFIGURED! Please set ConnectionStrings__DefaultConnection environment variable in Azure App Settings.");
+    
+    // In production, we should fail fast if connection string is missing
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Database connection string is not configured. " +
+            "Please set the 'ConnectionStrings__DefaultConnection' environment variable in Azure App Settings. " +
+            "The connection string should be in format: Host=db.xxx.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD");
+    }
+}
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    // Use placeholder during build if connection string is not available
-    // This allows the app to build without secrets present
+    // Use placeholder during build if connection string is not available (development only)
     var connString = connectionString ?? "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
     
     // Optimize connection string for Azure/Supabase performance

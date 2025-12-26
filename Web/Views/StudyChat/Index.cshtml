@@ -176,6 +176,11 @@
                 <div class="message-input-container">
                     <form class="message-form" id="messageForm">
                         @Html.AntiForgeryToken()
+                        @{
+                            var selectedChat = ViewBag.SelectedChat as Web.Models.Chat;
+                            var currentChatId = selectedChat?.Id;
+                        }
+                        <input type="hidden" id="currentChatId" value="@currentChatId" />
                         <div class="input-wrapper">
                             <textarea 
                                 class="message-input" 
@@ -340,7 +345,11 @@
                 }
                 messageInput.disabled = true;
 
-                // Add user message to chat immediately
+                // Get current chat ID
+                const chatIdInput = document.getElementById('currentChatId');
+                const currentChatId = chatIdInput ? (chatIdInput.value ? parseInt(chatIdInput.value) : null) : null;
+
+                // Add user message to chat immediately (will be replaced when page reloads)
                 addMessageToChat(input, true);
 
                 // Clear input
@@ -348,14 +357,17 @@
                 messageInput.style.height = 'auto';
 
                 try {
-                    // Send message to server
+                    // Send message to server with chatId
                     const response = await fetch('/StudyChat/SendMessage', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
                         credentials: 'same-origin', // Include cookies for authentication
-                        body: JSON.stringify({ message: input })
+                        body: JSON.stringify({ 
+                            message: input,
+                            chatId: currentChatId
+                        })
                     });
 
                     if (!response.ok) {
@@ -368,13 +380,31 @@
                     // Debug logging
                     console.log('Response data:', data);
                     
-                    // Add AI response to chat
+                    // Add AI response to chat (will be replaced when page reloads)
                     if (data.success && data.aiMessage) {
                         addMessageToChat(data.aiMessage, false);
                         
                         // Log debug info if available
                         if (data.debug) {
                             console.log('Debug info:', data.debug);
+                        }
+                        
+                        // Reload page to show all messages from database
+                        // This ensures we see the saved user message and any AI message saved by the webhook
+                        if (data.chatId) {
+                            // Update the chatId in the hidden input if it was created
+                            if (chatIdInput && !currentChatId) {
+                                chatIdInput.value = data.chatId;
+                            }
+                            // Reload after a short delay to allow the AI message to be saved
+                            setTimeout(() => {
+                                window.location.href = '/StudyChat?chatId=' + data.chatId;
+                            }, 500);
+                        } else if (currentChatId) {
+                            // Reload current chat
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 500);
                         }
                     } else {
                         // Log error details

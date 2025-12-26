@@ -386,6 +386,49 @@ namespace Web.Controllers
                     return BadRequest(new { error = "Message is required", traceId });
                 }
 
+                // Resolve user ID
+                var userId = await ResolveUserIdAsync();
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("SendMessage: User not authenticated. TraceId={TraceId}", traceId);
+                    return Unauthorized(new { error = "User not authenticated", traceId });
+                }
+
+                // Get or create chat
+                Models.Chat chat;
+                if (request.ChatId.HasValue)
+                {
+                    // Verify chat belongs to user
+                    chat = await _chatService.GetChatByIdAsync(request.ChatId.Value, userId.Value);
+                    if (chat == null)
+                    {
+                        _logger.LogWarning("SendMessage: Chat {ChatId} not found or doesn't belong to user {UserId}. TraceId={TraceId}", 
+                            request.ChatId.Value, userId.Value, traceId);
+                        return NotFound(new { error = "Chat not found", traceId });
+                    }
+                }
+                else
+                {
+                    // Create new chat
+                    chat = await _chatService.CreateNewChatAsync(userId.Value, "New Chat");
+                    _logger.LogInformation("SendMessage: Created new chat {ChatId} for user {UserId}. TraceId={TraceId}", 
+                        chat.Id, userId.Value, traceId);
+                }
+
+                // Save user message to database
+                var userMessage = new Models.Message
+                {
+                    ChatId = chat.Id,
+                    SenderId = userId.Value,
+                    Content = request.Message.Trim(),
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+
+                _dbContext.Messages.Add(userMessage);
+                await _dbContext.SaveChangesAsync();
+                _logger.LogInformation("SendMessage: Saved user message {MessageId} to chat {ChatId}. TraceId={TraceId}", 
+                    userMessage.Id, chat.Id, traceId);
+
                 // Get webhook URL from configuration
                 var webhookUrl = _configuration["AiWebhook:Url"];
                 if (string.IsNullOrEmpty(webhookUrl))
@@ -394,8 +437,8 @@ namespace Web.Controllers
                     return StatusCode(500, new { error = "AI service is not configured", traceId });
                 }
 
-                _logger.LogInformation("SendMessage: Starting. TraceId={TraceId}, WebhookUrl={WebhookUrl}, MessageLength={Length}", 
-                    traceId, webhookUrl, request.Message.Length);
+                _logger.LogInformation("SendMessage: Starting. TraceId={TraceId}, WebhookUrl={WebhookUrl}, MessageLength={Length}, ChatId={ChatId}", 
+                    traceId, webhookUrl, request.Message.Length, chat.Id);
 
                 // Prepare request to webhook - n8n webhook receives the entire JSON body
                 // Based on workflow: AI Agent uses "={{ $json }}" so it receives the full request body
@@ -546,6 +589,8 @@ namespace Web.Controllers
                     success = true, 
                     userMessage = request.Message.Trim(),
                     aiMessage = aiMessage,
+                    chatId = chat.Id,
+                    messageId = userMessage.Id,
                     traceId = traceId,
                     debug = new
                     {
@@ -594,6 +639,7 @@ namespace Web.Controllers
     public class SendMessageRequest
     {
         public string? Message { get; set; }
+        public long? ChatId { get; set; }
     }
 }
 

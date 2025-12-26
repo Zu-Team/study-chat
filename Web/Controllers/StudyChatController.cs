@@ -207,6 +207,32 @@ namespace Web.Controllers
             // Step 4: User is authenticated - allow access to study page
             var finalUserId = userId.Value;
 
+            // SECURITY: Double-check user ID from session to prevent mix-ups
+            // Verify the session belongs to this user
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                try
+                {
+                    var session = await _dbContext.Sessions
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                    
+                    if (session != null && session.UserId.HasValue && session.UserId.Value != finalUserId)
+                    {
+                        // Session user ID doesn't match resolved user ID - security issue!
+                        _logger.LogWarning("SECURITY: User ID mismatch! SessionUserId={SessionUserId}, ResolvedUserId={ResolvedUserId}, SessionId={SessionId}", 
+                            session.UserId.Value, finalUserId, sessionId);
+                        // Use session's user ID as the source of truth
+                        finalUserId = session.UserId.Value;
+                        _logger.LogInformation("Using session's user ID {UserId} for authorization", finalUserId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error verifying session user ID. SessionId={SessionId}, ResolvedUserId={ResolvedUserId}", sessionId, finalUserId);
+                }
+            }
+
             // Load all chats for sidebar using user_id
             // Initialize with empty list - if there are no chats, that's fine, not an error
             ViewBag.Chats = new List<Models.Chat>();
@@ -214,7 +240,18 @@ namespace Web.Controllers
             
             try
             {
+                // SECURITY: Explicitly filter chats by user ID - add logging for debugging
                 var chats = await _chatService.GetChatsForUserAsync(finalUserId);
+                _logger.LogInformation("Loaded {Count} chats for user {UserId}. SessionId={SessionId}", 
+                    chats?.Count ?? 0, finalUserId, sessionId);
+                
+                // SECURITY: Double-check all chats belong to this user (defense in depth)
+                if (chats != null && chats.Any(c => c.UserId != finalUserId))
+                {
+                    _logger.LogError("SECURITY VIOLATION: Found chats that don't belong to user {UserId}! Filtering out unauthorized chats.", finalUserId);
+                    chats = chats.Where(c => c.UserId == finalUserId).ToList();
+                }
+                
                 ViewBag.Chats = chats ?? new List<Models.Chat>();
                 // No chats is normal - don't show error, just show empty list
             }

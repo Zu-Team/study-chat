@@ -16,11 +16,24 @@ public class ChatService
 
     public async Task<List<Chat>> GetChatsForUserAsync(long userId)
     {
-        return await _context.Chats
+        // SECURITY: Explicitly filter by user ID - this is critical for authorization
+        // Use parameterized query to prevent SQL injection
+        var chats = await _context.Chats
             .AsNoTracking() // Read-only query - no change tracking needed
-            .Where(c => c.UserId == userId)
+            .Where(c => c.UserId == userId) // CRITICAL: Only return chats belonging to this user
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
+        
+        // SECURITY: Defense in depth - verify all returned chats belong to the user
+        // This should never happen if the query is correct, but it's a safety check
+        var unauthorizedChats = chats.Where(c => c.UserId != userId).ToList();
+        if (unauthorizedChats.Any())
+        {
+            // This is a critical security issue - log it
+            throw new InvalidOperationException($"SECURITY VIOLATION: Query returned {unauthorizedChats.Count} chats that don't belong to user {userId}");
+        }
+        
+        return chats;
     }
 
     public async Task<Chat> CreateNewChatAsync(long userId, string? chatName = null)

@@ -441,15 +441,19 @@ namespace Web.Controllers
                     traceId, webhookUrl, request.Message.Length, chat.Id);
 
                 // Prepare request to webhook - n8n webhook receives the entire JSON body
+                // Include all necessary information for n8n to insert into database
                 // Based on workflow: AI Agent uses "={{ $json }}" so it receives the full request body
-                // The AI Agent's text parameter is set to "={{ $json }}" which means it gets the entire webhook body
-                // We'll send the message in a format that the AI Agent can process
                 var webhookRequest = new
                 {
                     message = request.Message.Trim(),
                     text = request.Message.Trim(), // Some AI agents expect "text" field
                     input = request.Message.Trim(), // Alternative field name
-                    timestamp = DateTimeOffset.UtcNow
+                    chatId = chat.Id, // Chat ID for database insertion
+                    userId = userId.Value, // User ID for database insertion
+                    messageId = userMessage.Id, // User message ID (already saved)
+                    timestamp = DateTimeOffset.UtcNow,
+                    chatName = chat.Name, // Optional: chat name
+                    sessionId = HttpContext.GetSessionId() // Session ID if available
                 };
 
                 var jsonContent = JsonSerializer.Serialize(webhookRequest);

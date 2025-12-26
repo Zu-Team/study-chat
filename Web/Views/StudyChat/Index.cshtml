@@ -140,7 +140,13 @@
                 @if (hasSelectedChat && ViewBag.Messages != null)
                 {
                     var messages = (List<Web.Models.Message>)ViewBag.Messages;
-                    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    // Get userId from ViewBag (set by controller) or from claims as fallback
+                    var userId = ViewBag.UserId != null ? ViewBag.UserId.ToString() : User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    // Also try studychat_user_id claim
+                    if (string.IsNullOrEmpty(userId))
+                    {
+                        userId = User.FindFirst("studychat_user_id")?.Value;
+                    }
                     
                     @if (messages.Count == 0)
                     {
@@ -153,7 +159,7 @@
                         @foreach (var message in messages)
                         {
                             // Check if message is from the current user
-                            // userId is a string from claims, message.SenderId is a long?
+                            // userId is a string from claims/ViewBag, message.SenderId is a long?
                             // Convert both to strings for comparison, or compare as numbers
                             var isUserMessage = false;
                             if (message.SenderId.HasValue && !string.IsNullOrEmpty(userId))
@@ -169,9 +175,10 @@
                                     isUserMessage = message.SenderId.Value.ToString() == userId;
                                 }
                             }
-                            // If SenderId is null, it's an AI message (assistant)
-                            // If SenderId is 1 (AI user), it's also an AI message
+                            // IMPORTANT: If SenderId is 1 (AI user), it's always an AI message
+                            // If SenderId is null, it's also an AI message (assistant)
                             // Only messages with SenderId matching current user are user messages
+                            // If SenderId doesn't match current user, it's an AI/assistant message
                             <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
                                 <div class="message-bubble">
                                     @Html.Raw(message.Content.Replace("\n", "<br/>"))

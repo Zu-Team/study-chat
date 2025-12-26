@@ -236,6 +236,41 @@ namespace Web.Controllers
                 }
             }
 
+            // SECURITY: Check chat authorization FIRST, before loading any data
+            // If chatId is provided in URL, verify it belongs to the user IMMEDIATELY
+            if (chatId.HasValue)
+            {
+                try
+                {
+                    // CRITICAL: Verify chat ownership BEFORE loading any other data
+                    var chatExists = await _dbContext.Chats
+                        .AsNoTracking()
+                        .AnyAsync(c => c.Id == chatId.Value && c.UserId == finalUserId);
+                    
+                    if (!chatExists)
+                    {
+                        // Chat doesn't exist or doesn't belong to this user - SECURITY VIOLATION
+                        var traceId = HttpContext.TraceIdentifier;
+                        _logger.LogWarning("SECURITY: Unauthorized chat access attempt blocked. UserId={UserId}, ChatId={ChatId}, SessionId={SessionId}, TraceId={TraceId}", 
+                            finalUserId, chatId.Value, sessionId, traceId);
+                        
+                        // Redirect immediately - don't load any data
+                        return RedirectToAction("Index", "StudyChat");
+                    }
+                    
+                    _logger.LogInformation("Chat authorization verified. UserId={UserId}, ChatId={ChatId}, SessionId={SessionId}", 
+                        finalUserId, chatId.Value, sessionId);
+                }
+                catch (Exception ex)
+                {
+                    var traceId = HttpContext.TraceIdentifier;
+                    _logger.LogError(ex, "Error checking chat authorization. TraceId={TraceId}, ChatId={ChatId}, UserId={UserId}", 
+                        traceId, chatId.Value, finalUserId);
+                    // On error, redirect to be safe
+                    return RedirectToAction("Index", "StudyChat");
+                }
+            }
+
             // Load all chats for sidebar using user_id
             // Initialize with empty list - if there are no chats, that's fine, not an error
             ViewBag.Chats = new List<Models.Chat>();

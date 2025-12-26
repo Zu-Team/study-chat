@@ -136,12 +136,15 @@ namespace Web.Controllers
             long? userId = null;
             
             // Step 1: Try to get user ID from session (session-based authentication)
+            // SECURITY: Session is PRIMARY source of truth - never override with cookie if session has user_id
             var sessionId = HttpContext.GetSessionId();
+            Models.Session? session = null;
+            
             if (!string.IsNullOrEmpty(sessionId))
             {
                 try
                 {
-                    var session = await _dbContext.Sessions
+                    session = await _dbContext.Sessions
                         .AsNoTracking()
                         .FirstOrDefaultAsync(s => s.SessionId == sessionId);
                     
@@ -158,42 +161,52 @@ namespace Web.Controllers
             }
             
             // Step 2: Fallback - get user ID from cookie authentication claims
+            // SECURITY: Only use cookie if session doesn't have a user_id
+            // This prevents mixing users when session belongs to one user but cookie belongs to another
             if (!userId.HasValue)
             {
-                userId = await ResolveUserIdFromClaimsAsync();
-                if (userId.HasValue)
+                var cookieUserId = await ResolveUserIdFromClaimsAsync();
+                if (cookieUserId.HasValue)
                 {
-                    _logger.LogInformation("User {UserId} authenticated via cookie claims", userId.Value);
+                    _logger.LogInformation("User {UserId} authenticated via cookie claims (session had no user_id)", cookieUserId.Value);
                     
-                    // If we have a session but it's not linked, link it now (in background)
-                    if (!string.IsNullOrEmpty(sessionId))
+                    // If we have a session but it's not linked, link it now (SYNCHRONOUSLY to prevent race conditions)
+                    if (session != null && !session.UserId.HasValue)
                     {
-                        _ = Task.Run(async () =>
+                        try
                         {
-                            try
+                            // Use tracking context to update session
+                            var trackedSession = await _dbContext.Sessions
+                                .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+                            
+                            if (trackedSession != null && !trackedSession.UserId.HasValue)
                             {
-                                using var scope = HttpContext.RequestServices.CreateScope();
-                                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                                var logger = scope.ServiceProvider.GetService<ILogger<StudyChatController>>();
-                                
-                                var session = await dbContext.Sessions
-                                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                                
-                                if (session != null && !session.UserId.HasValue)
-                                {
-                                    session.UserId = userId.Value;
-                                    session.LastAccessedAt = DateTimeOffset.UtcNow;
-                                    await dbContext.SaveChangesAsync();
-                                    logger?.LogInformation("Linked session {SessionId} to user {UserId} during Index access", sessionId, userId.Value);
-                                }
+                                trackedSession.UserId = cookieUserId.Value;
+                                trackedSession.LastAccessedAt = DateTimeOffset.UtcNow;
+                                await _dbContext.SaveChangesAsync();
+                                _logger.LogInformation("Linked session {SessionId} to user {UserId} during Index access", sessionId, cookieUserId.Value);
                             }
-                            catch (Exception ex)
-                            {
-                                var logger = HttpContext.RequestServices.GetService<ILogger<StudyChatController>>();
-                                logger?.LogWarning(ex, "Failed to link session during Index access");
-                            }
-                        });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to link session during Index access. SessionId={SessionId}, UserId={UserId}", 
+                                sessionId, cookieUserId.Value);
+                        }
                     }
+                    
+                    userId = cookieUserId;
+                }
+            }
+            else if (session != null && session.UserId.HasValue)
+            {
+                // SECURITY: Session has user ID - verify cookie claims match (if they exist) for logging
+                // We still use session user ID as source of truth, but log mismatches
+                var cookieUserId = await ResolveUserIdFromClaimsAsync();
+                if (cookieUserId.HasValue && cookieUserId.Value != userId.Value)
+                {
+                    _logger.LogWarning("SECURITY: User ID mismatch between session and cookie! SessionUserId={SessionUserId}, CookieUserId={CookieUserId}, SessionId={SessionId}. " +
+                        "Using session user ID as source of truth.", userId.Value, cookieUserId.Value, sessionId);
+                    // Use session user ID (session is primary source of truth)
                 }
             }
             

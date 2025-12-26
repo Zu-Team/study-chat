@@ -670,6 +670,105 @@ namespace Web.Controllers
                 });
             }
         }
+
+        // GET: /StudyChat/GetCustomizeAI
+        [HttpGet]
+        public async Task<IActionResult> GetCustomizeAI()
+        {
+            var traceId = HttpContext.TraceIdentifier;
+            
+            try
+            {
+                var userId = await ResolveUserIdAsync();
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("GetCustomizeAI: User not authenticated. TraceId={TraceId}", traceId);
+                    return Unauthorized(new { error = "User not authenticated", traceId });
+                }
+
+                var customize = await _dbContext.Customizes
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.UserId == userId.Value);
+
+                if (customize != null)
+                {
+                    return Ok(new { text = customize.Text, traceId });
+                }
+                else
+                {
+                    return Ok(new { text = "", traceId });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetCustomizeAI: Unhandled exception. TraceId={TraceId}", traceId);
+                return StatusCode(500, new { error = $"An unexpected server error occurred: {ex.Message}", traceId });
+            }
+        }
+
+        // POST: /StudyChat/SaveCustomizeAI
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SaveCustomizeAI([FromBody] CustomizeAIRequest request)
+        {
+            var traceId = HttpContext.TraceIdentifier;
+            
+            try
+            {
+                var userId = await ResolveUserIdAsync();
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("SaveCustomizeAI: User not authenticated. TraceId={TraceId}", traceId);
+                    return Unauthorized(new { error = "User not authenticated", traceId });
+                }
+
+                if (request?.Text == null)
+                {
+                    return BadRequest(new { error = "Text is required", traceId });
+                }
+
+                var text = request.Text.Trim();
+                if (text.Length > 500)
+                {
+                    return BadRequest(new { error = "Text cannot exceed 500 characters", traceId });
+                }
+
+                // Check if customization already exists
+                var existing = await _dbContext.Customizes
+                    .FirstOrDefaultAsync(c => c.UserId == userId.Value);
+
+                if (existing != null)
+                {
+                    // Update existing
+                    existing.Text = text;
+                    existing.UpdatedAt = DateTimeOffset.UtcNow;
+                    _dbContext.Customizes.Update(existing);
+                }
+                else
+                {
+                    // Create new
+                    var customize = new Models.Customize
+                    {
+                        UserId = userId.Value,
+                        Text = text,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow
+                    };
+                    _dbContext.Customizes.Add(customize);
+                }
+
+                await _dbContext.SaveChangesAsync();
+                _logger.LogInformation("SaveCustomizeAI: Saved customization for user {UserId}. TraceId={TraceId}", userId.Value, traceId);
+
+                return Ok(new { success = true, traceId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SaveCustomizeAI: Unhandled exception. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}", 
+                    traceId, ex.GetType().Name, ex.Message);
+                return StatusCode(500, new { error = $"An unexpected server error occurred: {ex.Message}", traceId });
+            }
+        }
     }
 
     // Request model for SendMessage endpoint

@@ -534,6 +534,33 @@ namespace Web.Controllers
                 _logger.LogInformation("SendMessage: Starting. TraceId={TraceId}, WebhookUrl={WebhookUrl}, MessageLength={Length}, ChatId={ChatId}", 
                     traceId, webhookUrl, request.Message.Length, chat.Id);
 
+                // Get user's AI customization (if exists)
+                string? customizeText = null;
+                try
+                {
+                    var customization = await _dbContext.Customizes
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(c => c.UserId == userId.Value);
+                    
+                    if (customization != null && !string.IsNullOrWhiteSpace(customization.Text))
+                    {
+                        customizeText = customization.Text;
+                        _logger.LogInformation("SendMessage: Found customization for user {UserId}. Length={Length}, TraceId={TraceId}", 
+                            userId.Value, customizeText.Length, traceId);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("SendMessage: No customization found for user {UserId}. TraceId={TraceId}", 
+                            userId.Value, traceId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SendMessage: Failed to load customization for user {UserId}. Continuing without customization. TraceId={TraceId}", 
+                        userId.Value, traceId);
+                    // Continue without customization - not critical
+                }
+
                 // Prepare request to webhook - n8n webhook receives the entire JSON body
                 // Include all necessary information for n8n to insert into database
                 // Based on workflow: AI Agent uses "={{ $json }}" so it receives the full request body
@@ -543,6 +570,7 @@ namespace Web.Controllers
                     text = request.Message.Trim(), // Some AI agents expect "text" field
                     input = request.Message.Trim(), // Alternative field name
                     type = request.Type ?? "normal", // Message type: "normal" or "quiz"
+                    customize = customizeText ?? string.Empty, // User's AI customization instructions
                     chatId = chat.Id, // Chat ID for database insertion
                     userId = userId.Value, // User ID for database insertion
                     messageId = userMessage.Id, // User message ID (already saved)

@@ -86,7 +86,7 @@ public class SessionIdMiddleware
                     }
                     else
                     {
-                        logger?.LogDebug("No recent anonymous session found for OAuth callback. Will create new one. Recent sessions count: {Count}", recentSession.Count);
+                        logger?.LogDebug("No recent anonymous session found for OAuth callback. Will create new one.");
                     }
                 }
                 catch (Exception ex)

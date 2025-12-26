@@ -436,12 +436,14 @@ app.UseMiddleware<SessionIdMiddleware>();
 app.UseHttpsRedirection();
 app.UseRouting();
 
-// Session-based authentication middleware - authenticates user based on session ID
-app.UseMiddleware<SessionAuthenticationMiddleware>();
-
-// Authentication & Authorization middleware
+// Authentication & Authorization middleware - MUST run BEFORE SessionAuthenticationMiddleware
+// This ensures cookie authentication populates context.User first, avoiding unnecessary DB queries
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Session-based authentication middleware - authenticates user based on session ID
+// Runs AFTER cookie auth, so it only queries DB if user is not already authenticated
+app.UseMiddleware<SessionAuthenticationMiddleware>();
 
 app.MapStaticAssets();
 

@@ -37,32 +37,46 @@ if (!string.IsNullOrWhiteSpace(home))
 // Connection string is loaded from:
 // 1. Environment variable: ConnectionStrings__DefaultConnection (highest priority - Azure App Settings)
 // 2. User Secrets (Development only): ConnectionStrings:DefaultConnection
-// 3. appsettings.json: ConnectionStrings:DefaultConnection (lowest priority, not recommended for secrets)
+// 3. Constructed from Supabase config in appsettings.json (if DbHost and DbPassword are available)
+// 4. appsettings.json: ConnectionStrings:DefaultConnection (lowest priority, not recommended for secrets)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Validate connection string - log warning but don't prevent app startup
-// This allows the app to start even if connection string is temporarily missing
-// The middleware will handle database errors gracefully
+// If connection string is not set or is placeholder, try to construct it from Supabase config
 if (string.IsNullOrWhiteSpace(connectionString) || 
     connectionString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
     connectionString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
 {
-    // Log warning but don't throw - let the app start and handle errors gracefully
-    // This prevents the app from crashing if connection string is temporarily unavailable
-    var tempLogger = LoggerFactory.Create(loggingBuilder => loggingBuilder.AddConsole()).CreateLogger<Program>();
-    tempLogger.LogWarning("DATABASE CONNECTION STRING IS NOT CONFIGURED! " +
-        "Please set ConnectionStrings__DefaultConnection environment variable in Azure App Settings. " +
-        "The app will continue to start, but database operations will fail. " +
-        "Format: Host=db.xxx.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD");
+    // Try to construct connection string from Supabase configuration
+    var dbHost = builder.Configuration["Supabase:DbHost"];
+    var dbPassword = builder.Configuration["Supabase:DbPassword"]; // Password should be set in Azure App Settings: Supabase__DbPassword
+    
+    if (!string.IsNullOrWhiteSpace(dbHost) && !string.IsNullOrWhiteSpace(dbPassword))
+    {
+        // Construct connection string from Supabase config
+        connectionString = $"Host={dbHost};Port=5432;Database=postgres;Username=postgres;Password={dbPassword}";
+        
+        var tempLogger = LoggerFactory.Create(loggingBuilder => loggingBuilder.AddConsole()).CreateLogger<Program>();
+        tempLogger.LogInformation("Constructed database connection string from Supabase configuration. Host={DbHost}", dbHost);
+    }
+    else
+    {
+        // Log warning but don't throw - let the app start and handle errors gracefully
+        // This prevents the app from crashing if connection string is temporarily unavailable
+        var tempLogger = LoggerFactory.Create(loggingBuilder => loggingBuilder.AddConsole()).CreateLogger<Program>();
+        tempLogger.LogWarning("DATABASE CONNECTION STRING IS NOT CONFIGURED! " +
+            "Please set one of the following in Azure App Settings: " +
+            "1. ConnectionStrings__DefaultConnection (full connection string), OR " +
+            "2. Supabase__DbPassword (password only, will use Supabase:DbHost from appsettings.json). " +
+            "The app will continue to start, but database operations will fail.");
+    }
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    // Use placeholder during build if connection string is not available (development only)
-    // If connection string is invalid, use a safe placeholder that won't cause exceptions
+    // Use the connection string we determined above (either from config or constructed from Supabase)
     var connString = connectionString;
     
-    // Check if connection string is valid before trying to use it
+    // Final check: if connection string is still invalid, use a safe placeholder
     if (string.IsNullOrWhiteSpace(connString) || 
         connString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
         connString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))

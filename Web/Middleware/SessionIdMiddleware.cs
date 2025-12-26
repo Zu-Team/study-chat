@@ -172,25 +172,29 @@ public class SessionIdMiddleware
                 {
                     // Database connection errors - log but don't break the request
                     var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                    logger?.LogWarning(dbEx, "Database connection error while saving session. SessionId={SessionId}, Error={Error}. " +
-                        "This may indicate the connection string is not configured correctly in Azure App Settings.", 
-                        sessionId, dbEx.Message);
+                    logger?.LogError(dbEx, "❌ DATABASE CONNECTION ERROR while saving session. SessionId={SessionId}, SQLState={SqlState}, Error={Error}. " +
+                        "This indicates the connection string is NOT configured correctly in Azure App Settings. " +
+                        "Please set ConnectionStrings__DefaultConnection or Supabase__DbPassword in Azure Portal.", 
+                        sessionId, dbEx.SqlState, dbEx.Message);
                     // Continue - session ID is still set in cookie, just not saved to DB
                 }
                 catch (Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx)
                 {
                     // Database update errors - log but don't break the request
                     var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                    logger?.LogWarning(dbUpdateEx, "Database update error while saving session. SessionId={SessionId}, Error={Error}", 
-                        sessionId, dbUpdateEx.Message);
+                    var innerEx = dbUpdateEx.InnerException;
+                    logger?.LogError(dbUpdateEx, "❌ DATABASE UPDATE ERROR while saving session. SessionId={SessionId}, Error={Error}, InnerError={InnerError}. " +
+                        "This may indicate a schema mismatch or connection issue.", 
+                        sessionId, dbUpdateEx.Message, innerEx?.Message ?? "None");
                     // Continue - session ID is still set in cookie
                 }
                 catch (Exception ex)
                 {
                     // Any other errors - log but don't break the request
                     var logger = context.RequestServices.GetService<ILogger<SessionIdMiddleware>>();
-                    logger?.LogError(ex, "Unexpected error while saving session to database. SessionId={SessionId}, Error={Error}. " +
-                        "Make sure you've run the migration SQL to add session_id column.", sessionId, ex.Message);
+                    logger?.LogError(ex, "❌ UNEXPECTED ERROR while saving session to database. SessionId={SessionId}, Error={Error}, Type={ExceptionType}. " +
+                        "Make sure you've run the migration SQL to add session_id column and the connection string is configured.", 
+                        sessionId, ex.Message, ex.GetType().Name);
                     // Continue - session ID is still set in cookie
                 }
             }

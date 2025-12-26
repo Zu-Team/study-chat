@@ -369,6 +369,24 @@
             }
         }
 
+        // Quiz mode state
+        let quizModeActive = false;
+        const quizButton = document.getElementById('quizButton');
+        
+        // Toggle quiz mode
+        if (quizButton) {
+            quizButton.addEventListener('click', function() {
+                quizModeActive = !quizModeActive;
+                if (quizModeActive) {
+                    quizButton.classList.add('active');
+                    quizButton.setAttribute('title', 'Quiz Mode: ON');
+                } else {
+                    quizButton.classList.remove('active');
+                    quizButton.setAttribute('title', 'Quiz Mode: OFF');
+                }
+            });
+        }
+
         // Handle form submission - send message to AI webhook
         const messageForm = document.getElementById('messageForm');
         if (messageForm) {
@@ -379,6 +397,9 @@
                 if (!input) {
                     return;
                 }
+
+                // Determine message type based on quiz mode
+                const messageType = quizModeActive ? 'quiz' : 'normal';
 
                 // Disable form while sending
                 const sendButton = messageForm.querySelector('.send-button');
@@ -401,7 +422,7 @@
                 messageInput.style.height = 'auto';
 
                 try {
-                    // Send message to server with chatId
+                    // Send message to server with chatId and message type
                     const response = await fetch('/StudyChat/SendMessage', {
                         method: 'POST',
                         headers: {
@@ -410,7 +431,8 @@
                         credentials: 'same-origin', // Include cookies for authentication
                         body: JSON.stringify({ 
                             message: input,
-                            chatId: currentChatId
+                            chatId: currentChatId,
+                            type: messageType
                         })
                     });
 

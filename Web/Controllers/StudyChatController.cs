@@ -222,29 +222,17 @@ namespace Web.Controllers
 
             // SECURITY: Double-check user ID from session to prevent mix-ups
             // Verify the session belongs to this user
-            // Note: session variable is already declared above, so we reuse it
-            if (!string.IsNullOrEmpty(sessionId) && session != null)
+            // session variable is already declared above, so we just verify it matches
+            if (!string.IsNullOrEmpty(sessionId) && session != null && session.UserId.HasValue)
             {
-                try
+                if (session.UserId.Value != finalUserId)
                 {
-                    // Re-query session to ensure we have latest data (session variable from above is AsNoTracking)
-                    var trackedSession = await _dbContext.Sessions
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-                    
-                    if (trackedSession != null && trackedSession.UserId.HasValue && trackedSession.UserId.Value != finalUserId)
-                    {
-                        // Session user ID doesn't match resolved user ID - security issue!
-                        _logger.LogWarning("SECURITY: User ID mismatch! SessionUserId={SessionUserId}, ResolvedUserId={ResolvedUserId}, SessionId={SessionId}", 
-                            trackedSession.UserId.Value, finalUserId, sessionId);
-                        // Use session's user ID as the source of truth
-                        finalUserId = trackedSession.UserId.Value;
-                        _logger.LogInformation("Using session's user ID {UserId} for authorization", finalUserId);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error verifying session user ID. SessionId={SessionId}, ResolvedUserId={ResolvedUserId}", sessionId, finalUserId);
+                    // Session user ID doesn't match resolved user ID - security issue!
+                    _logger.LogWarning("SECURITY: User ID mismatch! SessionUserId={SessionUserId}, ResolvedUserId={ResolvedUserId}, SessionId={SessionId}", 
+                        session.UserId.Value, finalUserId, sessionId);
+                    // Use session's user ID as the source of truth
+                    finalUserId = session.UserId.Value;
+                    _logger.LogInformation("Using session's user ID {UserId} for authorization", finalUserId);
                 }
             }
 

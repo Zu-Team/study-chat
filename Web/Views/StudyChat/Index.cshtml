@@ -352,14 +352,29 @@
 
                     const data = await response.json();
                     
+                    // Debug logging
+                    console.log('Response data:', data);
+                    
                     // Add AI response to chat
                     if (data.success && data.aiMessage) {
                         addMessageToChat(data.aiMessage, false);
+                        
+                        // Log debug info if available
+                        if (data.debug) {
+                            console.log('Debug info:', data.debug);
+                        }
                     } else {
-                        throw new Error('Invalid response from server');
+                        // Log error details
+                        console.error('Invalid response:', data);
+                        throw new Error(data.error || 'Invalid response from server');
                     }
                 } catch (error) {
                     console.error('Error sending message:', error);
+                    console.error('Error details:', {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack
+                    });
                     
                     // Try to get more detailed error message
                     let errorMessage = 'Sorry, I encountered an error. Please try again.';
@@ -367,8 +382,21 @@
                         if (error.message) {
                             errorMessage = `Error: ${error.message}`;
                         }
+                        // If error has response data, try to extract error message
+                        if (error.response) {
+                            const errorData = await error.response.json().catch(() => null);
+                            if (errorData?.error) {
+                                errorMessage = `Error: ${errorData.error}`;
+                                if (errorData.details) {
+                                    errorMessage += ` (${errorData.details})`;
+                                }
+                                if (errorData.traceId) {
+                                    console.error('Trace ID:', errorData.traceId);
+                                }
+                            }
+                        }
                     } catch (e) {
-                        // Use default message
+                        console.error('Error parsing error message:', e);
                     }
                     
                     // Show error message

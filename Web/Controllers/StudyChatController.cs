@@ -382,85 +382,189 @@ namespace Web.Controllers
                 // Validate request
                 if (string.IsNullOrWhiteSpace(request?.Message))
                 {
-                    return BadRequest(new { error = "Message is required" });
+                    _logger.LogWarning("SendMessage: Empty message received. TraceId={TraceId}", traceId);
+                    return BadRequest(new { error = "Message is required", traceId });
                 }
 
                 // Get webhook URL from configuration
                 var webhookUrl = _configuration["AiWebhook:Url"];
                 if (string.IsNullOrEmpty(webhookUrl))
                 {
-                    _logger.LogError("AI Webhook URL is not configured");
-                    return StatusCode(500, new { error = "AI service is not configured" });
+                    _logger.LogError("AI Webhook URL is not configured. TraceId={TraceId}", traceId);
+                    return StatusCode(500, new { error = "AI service is not configured", traceId });
                 }
 
-                // Prepare request to webhook
+                _logger.LogInformation("SendMessage: Starting. TraceId={TraceId}, WebhookUrl={WebhookUrl}, MessageLength={Length}", 
+                    traceId, webhookUrl, request.Message.Length);
+
+                // Prepare request to webhook - n8n webhook receives the entire JSON body
+                // Based on workflow: AI Agent uses "={{ $json }}" so it receives the full request body
+                // The AI Agent's text parameter is set to "={{ $json }}" which means it gets the entire webhook body
+                // We'll send the message in a format that the AI Agent can process
                 var webhookRequest = new
                 {
                     message = request.Message.Trim(),
+                    text = request.Message.Trim(), // Some AI agents expect "text" field
+                    input = request.Message.Trim(), // Alternative field name
                     timestamp = DateTimeOffset.UtcNow
                 };
 
                 var jsonContent = JsonSerializer.Serialize(webhookRequest);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-                _logger.LogInformation("Sending message to AI webhook. Message length: {Length}", request.Message.Length);
+                _logger.LogInformation("SendMessage: Request payload. TraceId={TraceId}, Payload={Payload}", 
+                    traceId, jsonContent);
 
                 // Call webhook
+                _logger.LogInformation("SendMessage: Calling webhook. TraceId={TraceId}, Url={Url}", traceId, webhookUrl);
                 var response = await _httpClient.PostAsync(webhookUrl, content);
+
+                _logger.LogInformation("SendMessage: Webhook response received. TraceId={TraceId}, StatusCode={StatusCode}, Headers={Headers}", 
+                    traceId, response.StatusCode, string.Join(", ", response.Headers.Select(h => $"{h.Key}={string.Join(",", h.Value)}")));
 
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("AI webhook returned error. Status: {Status}, Response: {Response}", 
-                        response.StatusCode, errorContent);
-                    return StatusCode((int)response.StatusCode, new { error = "AI service error", details = errorContent });
+                    _logger.LogError("SendMessage: Webhook error. TraceId={TraceId}, Status={Status}, Response={Response}", 
+                        traceId, response.StatusCode, errorContent);
+                    return StatusCode((int)response.StatusCode, new { 
+                        error = "AI service error", 
+                        statusCode = (int)response.StatusCode,
+                        details = errorContent,
+                        traceId 
+                    });
                 }
 
                 // Read AI response
                 var responseContent = await response.Content.ReadAsStringAsync();
-                _logger.LogInformation("Received AI response. Length: {Length}", responseContent.Length);
+                _logger.LogInformation("SendMessage: Response content received. TraceId={TraceId}, Length={Length}, Content={Content}", 
+                    traceId, responseContent.Length, responseContent);
 
-                // Parse response (assuming webhook returns JSON with a message/response field)
-                // Adjust this based on your actual webhook response format
+                // Parse response - n8n AI Agent typically returns the response in the output
+                // The response structure from n8n AI Agent might be nested
                 string aiMessage;
                 try
                 {
                     var responseJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
-                    // Try common response field names
-                    if (responseJson.TryGetProperty("response", out var responseField))
+                    _logger.LogInformation("SendMessage: Parsing JSON response. TraceId={TraceId}, JsonKeys={Keys}", 
+                        traceId, string.Join(", ", responseJson.EnumerateObject().Select(p => p.Name)));
+                    
+                    // Try to find the AI response in common n8n output formats
+                    // n8n AI Agent might return: { output: "...", text: "...", response: "...", data: {...} }
+                    if (responseJson.TryGetProperty("output", out var outputField))
+                    {
+                        if (outputField.ValueKind == JsonValueKind.String)
+                            aiMessage = outputField.GetString() ?? responseContent;
+                        else if (outputField.ValueKind == JsonValueKind.Object)
+                        {
+                            // Try to find text/response in nested object
+                            if (outputField.TryGetProperty("text", out var textField))
+                                aiMessage = textField.GetString() ?? responseContent;
+                            else if (outputField.TryGetProperty("response", out var responseField))
+                                aiMessage = responseField.GetString() ?? responseContent;
+                            else
+                                aiMessage = outputField.ToString();
+                        }
+                        else
+                            aiMessage = outputField.ToString();
+                    }
+                    else if (responseJson.TryGetProperty("text", out var textField))
+                        aiMessage = textField.GetString() ?? responseContent;
+                    else if (responseJson.TryGetProperty("response", out var responseField))
                         aiMessage = responseField.GetString() ?? responseContent;
                     else if (responseJson.TryGetProperty("message", out var messageField))
                         aiMessage = messageField.GetString() ?? responseContent;
-                    else if (responseJson.TryGetProperty("text", out var textField))
-                        aiMessage = textField.GetString() ?? responseContent;
                     else if (responseJson.TryGetProperty("data", out var dataField))
-                        aiMessage = dataField.GetString() ?? responseContent;
+                    {
+                        if (dataField.ValueKind == JsonValueKind.String)
+                            aiMessage = dataField.GetString() ?? responseContent;
+                        else if (dataField.ValueKind == JsonValueKind.Object && dataField.TryGetProperty("text", out var dataText))
+                            aiMessage = dataText.GetString() ?? responseContent;
+                        else
+                            aiMessage = dataField.ToString();
+                    }
+                    else if (responseJson.TryGetProperty("json", out var jsonField))
+                    {
+                        // n8n sometimes wraps output in "json" property
+                        if (jsonField.ValueKind == JsonValueKind.String)
+                            aiMessage = jsonField.GetString() ?? responseContent;
+                        else if (jsonField.ValueKind == JsonValueKind.Object)
+                        {
+                            if (jsonField.TryGetProperty("text", out var jsonText))
+                                aiMessage = jsonText.GetString() ?? responseContent;
+                            else if (jsonField.TryGetProperty("output", out var jsonOutput))
+                                aiMessage = jsonOutput.GetString() ?? responseContent;
+                            else
+                                aiMessage = jsonField.ToString();
+                        }
+                        else
+                            aiMessage = jsonField.ToString();
+                    }
                     else
-                        aiMessage = responseContent; // Fallback to raw response
+                    {
+                        // If it's an array, try first element
+                        if (responseJson.ValueKind == JsonValueKind.Array && responseJson.GetArrayLength() > 0)
+                        {
+                            var firstItem = responseJson[0];
+                            if (firstItem.TryGetProperty("json", out var firstJson))
+                            {
+                                if (firstJson.TryGetProperty("output", out var firstOutput))
+                                    aiMessage = firstOutput.GetString() ?? responseContent;
+                                else if (firstJson.TryGetProperty("text", out var firstText))
+                                    aiMessage = firstText.GetString() ?? responseContent;
+                                else
+                                    aiMessage = firstJson.ToString();
+                            }
+                            else
+                                aiMessage = firstItem.ToString();
+                        }
+                        else
+                        {
+                            // Fallback: return formatted JSON
+                            aiMessage = JsonSerializer.Serialize(responseJson, new JsonSerializerOptions { WriteIndented = false });
+                        }
+                    }
+                    
+                    _logger.LogInformation("SendMessage: Extracted AI message. TraceId={TraceId}, MessageLength={Length}", 
+                        traceId, aiMessage.Length);
                 }
-                catch
+                catch (JsonException jsonEx)
                 {
-                    // If not JSON, use raw response
+                    _logger.LogWarning(jsonEx, "SendMessage: Failed to parse JSON response, using raw content. TraceId={TraceId}", traceId);
+                    aiMessage = responseContent;
+                }
+                catch (Exception parseEx)
+                {
+                    _logger.LogWarning(parseEx, "SendMessage: Error parsing response, using raw content. TraceId={TraceId}", traceId);
                     aiMessage = responseContent;
                 }
 
                 // Return success with AI response
+                _logger.LogInformation("SendMessage: Success. TraceId={TraceId}, ResponseLength={Length}", traceId, aiMessage.Length);
                 return Ok(new 
                 { 
                     success = true, 
                     userMessage = request.Message.Trim(),
-                    aiMessage = aiMessage 
+                    aiMessage = aiMessage,
+                    traceId = traceId,
+                    debug = new
+                    {
+                        webhookUrl = webhookUrl,
+                        responseLength = responseContent.Length,
+                        rawResponse = responseContent.Substring(0, Math.Min(500, responseContent.Length)) // First 500 chars for debugging
+                    }
                 });
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogError(ex, "AI webhook request timed out. TraceId={TraceId}", traceId);
+                _logger.LogError(ex, "SendMessage: Request timed out. TraceId={TraceId}, Timeout={Timeout}", 
+                    traceId, _httpClient.Timeout);
                 return StatusCode(504, new { error = "AI service request timed out. Please try again.", traceId });
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP error calling AI webhook. TraceId={TraceId}, Message={Message}, InnerException={InnerException}", 
-                    traceId, ex.Message, ex.InnerException?.Message);
+                _logger.LogError(ex, "SendMessage: HTTP error. TraceId={TraceId}, Message={Message}, InnerException={InnerException}, StackTrace={StackTrace}", 
+                    traceId, ex.Message, ex.InnerException?.Message, ex.StackTrace);
                 
                 // Check if it's an SSL certificate error
                 if (ex.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase) || 
@@ -470,13 +574,18 @@ namespace Web.Controllers
                     return StatusCode(500, new { error = "SSL certificate validation failed. Please check webhook certificate.", traceId });
                 }
                 
-                return StatusCode(500, new { error = $"Failed to connect to AI service: {ex.Message}", traceId });
+                return StatusCode(500, new { error = $"Failed to connect to AI service: {ex.Message}", traceId, details = ex.InnerException?.Message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending message to AI webhook. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}", 
-                    traceId, ex.GetType().Name, ex.Message);
-                return StatusCode(500, new { error = $"Failed to get AI response: {ex.Message}", traceId });
+                _logger.LogError(ex, "SendMessage: Unexpected error. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
+                    traceId, ex.GetType().Name, ex.Message, ex.StackTrace);
+                return StatusCode(500, new { 
+                    error = $"Failed to get AI response: {ex.Message}", 
+                    traceId,
+                    exceptionType = ex.GetType().Name,
+                    innerException = ex.InnerException?.Message
+                });
             }
         }
     }

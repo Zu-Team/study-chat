@@ -95,6 +95,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 
+// Register HttpClient for AI webhook calls
+builder.Services.AddHttpClient();
+
 // ============================================
 // AUTHENTICATION CONFIGURATION
 // ============================================

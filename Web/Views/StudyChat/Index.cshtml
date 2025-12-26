@@ -175,6 +175,7 @@
             {
                 <div class="message-input-container">
                     <form class="message-form" id="messageForm">
+                        @Html.AntiForgeryToken()
                         <div class="input-wrapper">
                             <textarea 
                                 class="message-input" 
@@ -306,19 +307,102 @@
             }
         }
 
-        // Handle form submission (placeholder - no actual logic yet)
+        // Handle form submission - send message to AI webhook
         const messageForm = document.getElementById('messageForm');
         if (messageForm) {
-            messageForm.addEventListener('submit', function(e) {
+            messageForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                // TODO: Add actual message sending logic
                 const input = messageInput.value.trim();
-                if (input) {
-                    console.log('Message:', input);
-                    messageInput.value = '';
-                    messageInput.style.height = 'auto';
+                
+                if (!input) {
+                    return;
+                }
+
+                // Disable form while sending
+                const sendButton = messageForm.querySelector('.send-button');
+                const originalButtonContent = sendButton?.innerHTML;
+                if (sendButton) {
+                    sendButton.disabled = true;
+                    sendButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM7 4a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 7 4zm0 6a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1z"/></svg>';
+                }
+                messageInput.disabled = true;
+
+                // Add user message to chat immediately
+                addMessageToChat(input, true);
+
+                // Clear input
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+
+                try {
+                    // Send message to server
+                    const response = await fetch('/StudyChat/SendMessage', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'same-origin', // Include cookies for authentication
+                        body: JSON.stringify({ message: input })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                        throw new Error(errorData.error || `Server error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    // Add AI response to chat
+                    if (data.success && data.aiMessage) {
+                        addMessageToChat(data.aiMessage, false);
+                    } else {
+                        throw new Error('Invalid response from server');
+                    }
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    // Show error message
+                    addMessageToChat('Sorry, I encountered an error. Please try again.', false);
+                } finally {
+                    // Re-enable form
+                    if (sendButton) {
+                        sendButton.disabled = false;
+                        if (originalButtonContent) {
+                            sendButton.innerHTML = originalButtonContent;
+                        }
+                    }
+                    messageInput.disabled = false;
+                    messageInput.focus();
                 }
             });
+        }
+
+        // Function to add message to chat UI
+        function addMessageToChat(message, isUser) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            if (!messagesContainer) return;
+
+            // Create message element
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            
+            // Convert newlines to <br> and escape HTML
+            const escapedMessage = message
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br/>');
+            
+            bubbleDiv.innerHTML = escapedMessage;
+            messageDiv.appendChild(bubbleDiv);
+            
+            // Add to container
+            messagesContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     </script>
 }

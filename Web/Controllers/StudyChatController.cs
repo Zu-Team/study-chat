@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
+using System.Text;
+using System.Text.Json;
 using Web.Services;
 using Web.Data;
 using Web.Extensions;
@@ -17,15 +20,20 @@ namespace Web.Controllers
         private readonly UserService _userService;
         private readonly ApplicationDbContext _dbContext;
         private readonly ILogger<StudyChatController> _logger;
+        private readonly IConfiguration _configuration;
+        private readonly HttpClient _httpClient;
         private const string StudyChatUserIdClaim = "studychat_user_id";
         private const string SessionIdCookieName = "studychat_session_id";
 
-        public StudyChatController(ChatService chatService, UserService userService, ApplicationDbContext dbContext, ILogger<StudyChatController> logger)
+        public StudyChatController(ChatService chatService, UserService userService, ApplicationDbContext dbContext, ILogger<StudyChatController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
         {
             _chatService = chatService;
             _userService = userService;
             _dbContext = dbContext;
             _logger = logger;
+            _configuration = configuration;
+            _httpClient = httpClientFactory.CreateClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(60); // 60 second timeout for AI responses
         }
 
         /// <summary>
@@ -361,6 +369,106 @@ namespace Web.Controllers
                 return RedirectToAction("Index", new { error = $"An unexpected error occurred. Ref: {traceId}" });
             }
         }
+
+        // POST: /StudyChat/SendMessage
+        [HttpPost]
+        [IgnoreAntiforgeryToken] // API endpoint - anti-forgery handled by [Authorize] attribute
+        public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request)
+        {
+            var traceId = HttpContext.TraceIdentifier;
+            
+            try
+            {
+                // Validate request
+                if (string.IsNullOrWhiteSpace(request?.Message))
+                {
+                    return BadRequest(new { error = "Message is required" });
+                }
+
+                // Get webhook URL from configuration
+                var webhookUrl = _configuration["AiWebhook:Url"];
+                if (string.IsNullOrEmpty(webhookUrl))
+                {
+                    _logger.LogError("AI Webhook URL is not configured");
+                    return StatusCode(500, new { error = "AI service is not configured" });
+                }
+
+                // Prepare request to webhook
+                var webhookRequest = new
+                {
+                    message = request.Message.Trim(),
+                    timestamp = DateTimeOffset.UtcNow
+                };
+
+                var jsonContent = JsonSerializer.Serialize(webhookRequest);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                _logger.LogInformation("Sending message to AI webhook. Message length: {Length}", request.Message.Length);
+
+                // Call webhook
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("AI webhook returned error. Status: {Status}, Response: {Response}", 
+                        response.StatusCode, errorContent);
+                    return StatusCode((int)response.StatusCode, new { error = "AI service error", details = errorContent });
+                }
+
+                // Read AI response
+                var responseContent = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation("Received AI response. Length: {Length}", responseContent.Length);
+
+                // Parse response (assuming webhook returns JSON with a message/response field)
+                // Adjust this based on your actual webhook response format
+                string aiMessage;
+                try
+                {
+                    var responseJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                    // Try common response field names
+                    if (responseJson.TryGetProperty("response", out var responseField))
+                        aiMessage = responseField.GetString() ?? responseContent;
+                    else if (responseJson.TryGetProperty("message", out var messageField))
+                        aiMessage = messageField.GetString() ?? responseContent;
+                    else if (responseJson.TryGetProperty("text", out var textField))
+                        aiMessage = textField.GetString() ?? responseContent;
+                    else if (responseJson.TryGetProperty("data", out var dataField))
+                        aiMessage = dataField.GetString() ?? responseContent;
+                    else
+                        aiMessage = responseContent; // Fallback to raw response
+                }
+                catch
+                {
+                    // If not JSON, use raw response
+                    aiMessage = responseContent;
+                }
+
+                // Return success with AI response
+                return Ok(new 
+                { 
+                    success = true, 
+                    userMessage = request.Message.Trim(),
+                    aiMessage = aiMessage 
+                });
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "AI webhook request timed out. TraceId={TraceId}", traceId);
+                return StatusCode(504, new { error = "AI service request timed out. Please try again." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending message to AI webhook. TraceId={TraceId}", traceId);
+                return StatusCode(500, new { error = "Failed to get AI response. Please try again.", traceId });
+            }
+        }
+    }
+
+    // Request model for SendMessage endpoint
+    public class SendMessageRequest
+    {
+        public string? Message { get; set; }
     }
 }
 

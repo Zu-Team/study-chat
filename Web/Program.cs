@@ -95,19 +95,47 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     
     // Optimize connection string for Azure/Supabase performance
     // Build optimized connection string with pooling parameters
+    // IMPORTANT: Parse existing connection string first to preserve SSL and other settings
     var connBuilder = new NpgsqlConnectionStringBuilder(connString);
     
+    // Only override pooling settings if not already set (preserve existing settings from Azure)
     // Connection pooling settings for better performance
-    connBuilder.Pooling = true;
-    connBuilder.MinPoolSize = 5; // Keep minimum connections ready
-    connBuilder.MaxPoolSize = 100; // Allow up to 100 concurrent connections
-    connBuilder.ConnectionLifetime = 0; // Don't recycle connections (0 = disabled)
-    connBuilder.Timeout = 15; // Connection timeout in seconds (reduced from default 30)
-    connBuilder.CommandTimeout = 15; // Command timeout in seconds
+    if (!connString.Contains("Pooling=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.Pooling = true;
+        connBuilder.MinPoolSize = 5; // Keep minimum connections ready
+        connBuilder.MaxPoolSize = 100; // Allow up to 100 concurrent connections
+    }
     
-    // Additional performance optimizations
-    connBuilder.NoResetOnClose = true; // Don't reset connection state on close (faster)
-    connBuilder.TcpKeepAlive = true; // Keep connections alive
+    // Only set these if not already in the connection string (preserve Azure settings)
+    if (!connString.Contains("Connection Lifetime=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.ConnectionLifetime = 0; // Don't recycle connections (0 = disabled)
+    }
+    
+    if (!connString.Contains("Timeout=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.Timeout = 15; // Connection timeout in seconds (reduced from default 30)
+    }
+    
+    if (!connString.Contains("Command Timeout=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.CommandTimeout = 15; // Command timeout in seconds
+    }
+    
+    // Additional performance optimizations (only if not already set)
+    if (!connString.Contains("NoResetOnClose=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.NoResetOnClose = true; // Don't reset connection state on close (faster)
+    }
+    
+    if (!connString.Contains("TcpKeepAlive=", StringComparison.OrdinalIgnoreCase))
+    {
+        connBuilder.TcpKeepAlive = true; // Keep connections alive
+    }
+    
+    // Preserve SSL Mode and Trust Server Certificate if they exist in the original connection string
+    // These are critical for Supabase pooler connections
     
     options.UseNpgsql(connBuilder.ConnectionString, npgsqlOptions =>
     {

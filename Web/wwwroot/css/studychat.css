@@ -502,6 +502,32 @@
 }
 
 /* ============================================
+   CUSTOMIZE AI MODAL ANIMATION
+   ============================================ */
+
+.customize-modal {
+    transition: opacity 0.3s ease-out, backdrop-filter 0.3s ease-out;
+    opacity: 1;
+    backdrop-filter: blur(4px);
+}
+
+.customize-modal.modal-closing {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+}
+
+.customize-modal > div {
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55), opacity 0.3s ease-out;
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.customize-modal.modal-closing > div {
+    transform: scale(0.9) translateY(-20px);
+    opacity: 0;
+}
+
+/* ============================================
    TOAST NOTIFICATION
    ============================================ */
 

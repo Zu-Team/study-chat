@@ -267,7 +267,7 @@
     </div>
     
     <!-- Customize AI Modal -->
-    <div id="customizeAIModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="customizeAIModal" class="customize-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
         <div style="background: #1a1a1a; border-radius: 12px; padding: 2rem; min-width: 500px; max-width: 90%; max-height: 90vh; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column;">
             <h2 style="color: #ffffff; margin-bottom: 1.5rem; font-size: 1.5rem;">Customize AI</h2>
             <div style="margin-bottom: 1.5rem; flex: 1; display: flex; flex-direction: column; min-height: 200px;">
@@ -408,7 +408,13 @@
             const modal = document.getElementById('customizeAIModal');
             const textarea = document.getElementById('customizeAIText');
             if (modal) {
-                modal.style.display = 'none';
+                // Add fade-out animation
+                modal.classList.add('modal-closing');
+                // Hide after animation completes
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    modal.classList.remove('modal-closing');
+                }, 300); // Match CSS animation duration
             }
             if (textarea) {
                 textarea.value = '';
@@ -465,9 +471,12 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
-                        // Show success animation
+                        // Show success animation first
                         showToast('AI customization saved successfully!', 'success');
-                        closeCustomizeAIModal();
+                        // Close modal with animation after a short delay (so toast is visible)
+                        setTimeout(() => {
+                            closeCustomizeAIModal();
+                        }, 200);
                     } else {
                         showToast('Failed to save: ' + (data.error || 'Unknown error'), 'error');
                     }

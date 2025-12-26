@@ -449,6 +449,7 @@ namespace Web.Controllers
                     message = request.Message.Trim(),
                     text = request.Message.Trim(), // Some AI agents expect "text" field
                     input = request.Message.Trim(), // Alternative field name
+                    type = request.Type ?? "normal", // Message type: "normal" or "quiz"
                     chatId = chat.Id, // Chat ID for database insertion
                     userId = userId.Value, // User ID for database insertion
                     messageId = userMessage.Id, // User message ID (already saved)

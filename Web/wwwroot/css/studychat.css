@@ -352,6 +352,49 @@
     background: #5a5a5a;
 }
 
+.quiz-button {
+    background: #2a2a2a;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #888888;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    padding: 0;
+    margin-right: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.quiz-button:hover {
+    background: #333333;
+    color: #aaaaaa;
+    transform: scale(1.05);
+}
+
+.quiz-button.active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.quiz-button.active:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+}
+
+.quiz-button:focus {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+}
+
 .send-button {
     background: linear-gradient(135deg, #4a9eff 0%, #3a8eef 100%);
     border: none;

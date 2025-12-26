@@ -648,5 +648,10 @@ namespace Web.Controllers
         public long? ChatId { get; set; }
         public string? Type { get; set; } = "normal"; // "normal" or "quiz"
     }
+
+    public class CustomizeAIRequest
+    {
+        public string? Text { get; set; }
+    }
 }
 

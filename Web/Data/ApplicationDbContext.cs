@@ -14,6 +14,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Chat> Chats { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<Session> Sessions { get; set; }
+    public DbSet<Customize> Customizes { get; set; }
     public DbSet<ChatSummary> ChatSummaries { get; set; }
     public DbSet<ChatQuiz> ChatQuizzes { get; set; }
 
@@ -87,6 +88,17 @@ public class ApplicationDbContext : DbContext
                 .WithOne(c => c.ChatQuiz)
                 .HasForeignKey<ChatQuiz>(cq => cq.ChatId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Customize configuration
+        modelBuilder.Entity<Customize>(entity =>
+        {
+            entity.HasOne(c => c.User)
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(c => c.UserId).IsUnique(); // One customization per user
         });
     }
 }

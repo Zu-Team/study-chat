@@ -108,6 +108,16 @@
                     }
                 }
             </div>
+            
+            <!-- Customize AI Button at bottom of sidebar -->
+            <div style="padding: 1rem; border-top: 1px solid #2a2a2a; margin-top: auto;">
+                <button class="btn-customize-ai" type="button" id="btnCustomizeAI" onclick="showCustomizeAIModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 9.207 2.828 1.536 1.536 2.828 9.207 10.5l-1.586 1.586a.5.5 0 0 1-.353.146H4.5a.5.5 0 0 1-.5-.5v-3.268a.5.5 0 0 1 .146-.353z"/>
+                    </svg>
+                    Customize AI
+                </button>
+            </div>
         </div>
     </aside>
 
@@ -243,6 +253,33 @@
             }
         }
     </main>
+    
+    <!-- Customize AI Modal -->
+    <div id="customizeAIModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #1a1a1a; border-radius: 12px; padding: 2rem; min-width: 500px; max-width: 90%; max-height: 90vh; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column;">
+            <h2 style="color: #ffffff; margin-bottom: 1.5rem; font-size: 1.5rem;">Customize AI</h2>
+            <div style="margin-bottom: 1.5rem; flex: 1; display: flex; flex-direction: column; min-height: 200px;">
+                <label for="customizeAIText" style="display: block; color: #cccccc; margin-bottom: 0.5rem; font-size: 0.9rem;">AI Instructions (max 500 characters)</label>
+                <textarea 
+                    id="customizeAIText" 
+                    maxlength="500"
+                    rows="8"
+                    style="width: 100%; padding: 0.75rem; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px; color: #e0e0e0; font-size: 0.95rem; font-family: inherit; resize: vertical; min-height: 150px; flex: 1;"
+                    placeholder="Enter your custom AI instructions here..."></textarea>
+                <div style="color: #888888; font-size: 0.85rem; margin-top: 0.5rem; text-align: right;">
+                    <span id="customizeAICharCount">0</span>/500
+                </div>
+            </div>
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button type="button" onclick="closeCustomizeAIModal()" style="padding: 0.75rem 1.5rem; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px; color: #e0e0e0; cursor: pointer; font-size: 0.95rem; transition: all 0.2s;">
+                    Cancel
+                </button>
+                <button type="button" id="btnSaveCustomizeAI" onclick="saveCustomizeAI()" style="padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #4a9eff 0%, #3a8eef 100%); border: none; border-radius: 8px; color: #ffffff; cursor: pointer; font-size: 0.95rem; font-weight: 600; transition: all 0.2s;">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
     
     <!-- New Chat Modal -->
     <div id="newChatModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">

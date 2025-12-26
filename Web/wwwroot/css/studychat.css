@@ -79,6 +79,39 @@
     outline-offset: 2px;
 }
 
+.btn-customize-ai {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-customize-ai:hover {
+    background: #333333;
+    border-color: #4a4a4a;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.btn-customize-ai:active {
+    transform: translateY(0);
+}
+
+.btn-customize-ai:focus {
+    outline: 2px solid #4a9eff;
+    outline-offset: 2px;
+}
+
 .sidebar-divider {
     border-color: #2a2a2a;
     margin: 0.5rem 0 1rem 0;

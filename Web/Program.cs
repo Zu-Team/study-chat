@@ -97,7 +97,8 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ChatService>();
 
 // Register HttpClient for AI webhook calls
-// Configure to handle self-signed certificates in development
+// Configure to handle self-signed certificates (for testing webhooks with self-signed certs)
+// NOTE: This bypasses SSL validation - only use with trusted internal webhooks
 builder.Services.AddHttpClient("AiWebhook", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(60);
@@ -105,13 +106,11 @@ builder.Services.AddHttpClient("AiWebhook", client =>
 {
     var handler = new HttpClientHandler();
     
-    // In development, allow self-signed certificates (for testing webhooks)
-    // WARNING: This is insecure and should only be used in development
-    if (builder.Environment.IsDevelopment())
-    {
-        handler.ServerCertificateCustomValidationCallback = 
-            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-    }
+    // Allow self-signed certificates for webhook (n8n typically uses self-signed certs)
+    // This is needed because the webhook at https://20.19.81.149 has a self-signed certificate
+    // WARNING: Only use this for trusted internal webhooks, not for external/public APIs
+    handler.ServerCertificateCustomValidationCallback = 
+        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
     
     return handler;
 });

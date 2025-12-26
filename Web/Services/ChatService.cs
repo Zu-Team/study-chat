@@ -43,9 +43,9 @@ public class ChatService
     {
         return await _context.Messages
             .AsNoTracking() // Read-only query - no change tracking needed
+            .Include(m => m.Sender) // Include must come before OrderBy for better performance
             .Where(m => m.ChatId == chatId)
             .OrderBy(m => m.CreatedAt)
-            .Include(m => m.Sender)
             .ToListAsync();
     }
 

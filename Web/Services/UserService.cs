@@ -75,11 +75,17 @@ public class UserService
         try
         {
             // Optimize: Try to find by google_sub OR email in a single query (faster than 2 separate queries)
+            // Use AsNoTracking for read-only query, then attach if we need to update
             user = await _context.Users
+                .AsNoTracking() // Read-only query
                 .FirstOrDefaultAsync(u => u.GoogleSub == googleSub || u.Email == email);
 
             if (user != null)
             {
+                // Attach the user to the context for update (since we used AsNoTracking)
+                _context.Users.Attach(user);
+                _context.Entry(user).State = Microsoft.EntityFrameworkCore.EntityState.Modified;
+                
                 // Update user with Google info
                 if (user.GoogleSub != googleSub)
                 {
@@ -162,12 +168,14 @@ public class UserService
     public async Task<User?> GetUserByIdAsync(long userId)
     {
         return await _context.Users
+            .AsNoTracking() // Read-only query
             .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
     }
 
     public async Task<User?> GetUserByEmailAsync(string email)
     {
         return await _context.Users
+            .AsNoTracking() // Read-only query
             .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
     }
 

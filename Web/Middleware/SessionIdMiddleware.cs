@@ -57,18 +57,25 @@ public class SessionIdMiddleware
                     // Try to find a recent anonymous session (UserId is null) with matching UserAgent
                     // Created within the last 15 minutes to account for OAuth redirect time
                     // Use UserAgent as primary match (more reliable than IP which can change)
-                    var recentSession = await dbContext.Sessions
+                    // Optimize: Query database directly instead of loading all sessions into memory
+                    var matchedSession = await dbContext.Sessions
+                        .AsNoTracking() // Read-only query
                         .Where(s => s.UserId == null && 
-                                    s.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-15))
+                                    s.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-15) &&
+                                    (!string.IsNullOrEmpty(userAgent) && s.UserAgent == userAgent))
                         .OrderByDescending(s => s.CreatedAt)
-                        .ToListAsync(); // Get all recent sessions, then filter in memory
+                        .FirstOrDefaultAsync(); // Try UserAgent match first
                     
-                    // Find best match: prefer exact UserAgent match, then any recent session
-                    var matchedSession = recentSession
-                        .FirstOrDefault(s => !string.IsNullOrEmpty(userAgent) && 
-                                           !string.IsNullOrEmpty(s.UserAgent) && 
-                                           s.UserAgent == userAgent) 
-                        ?? recentSession.FirstOrDefault(); // Fallback to most recent if no UserAgent match
+                    // Fallback: if no UserAgent match, get most recent session
+                    if (matchedSession == null)
+                    {
+                        matchedSession = await dbContext.Sessions
+                            .AsNoTracking()
+                            .Where(s => s.UserId == null && 
+                                        s.CreatedAt > DateTimeOffset.UtcNow.AddMinutes(-15))
+                            .OrderByDescending(s => s.CreatedAt)
+                            .FirstOrDefaultAsync();
+                    }
                     
                     if (matchedSession != null)
                     {
@@ -185,7 +192,9 @@ public class SessionIdMiddleware
                     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     var logger = scope.ServiceProvider.GetService<ILogger<SessionIdMiddleware>>();
                     
+                    // Use AsNoTracking for read-only check, then attach for update if needed
                     var session = await dbContext.Sessions
+                        .AsNoTracking()
                         .FirstOrDefaultAsync(s => s.SessionId == existingSessionId);
                     
                     if (session != null)
@@ -194,7 +203,10 @@ public class SessionIdMiddleware
                         var timeSinceLastUpdate = DateTimeOffset.UtcNow - session.LastAccessedAt;
                         if (timeSinceLastUpdate.TotalMinutes >= 5)
                         {
-                            session.LastAccessedAt = DateTimeOffset.UtcNow;
+                            // Attach and update only the LastAccessedAt field
+                            var sessionToUpdate = new Session { Id = session.Id, SessionId = session.SessionId };
+                            dbContext.Sessions.Attach(sessionToUpdate);
+                            sessionToUpdate.LastAccessedAt = DateTimeOffset.UtcNow;
                             await dbContext.SaveChangesAsync();
                             logger?.LogDebug("Session {SessionId} LastAccessedAt updated in DB.", existingSessionId);
                         }

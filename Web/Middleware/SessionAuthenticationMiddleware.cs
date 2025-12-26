@@ -26,24 +26,13 @@ public class SessionAuthenticationMiddleware
     {
         // Skip if user is already authenticated (e.g., via cookie authentication)
         // This middleware runs before UseAuthentication(), but cookie auth might have already run
-        // Check both User.Identity and try to authenticate cookie first to avoid unnecessary DB queries
         if (context.User?.Identity?.IsAuthenticated == true)
         {
             await _next(context);
             return;
         }
 
-        // Try to authenticate cookie first (this is faster than DB query)
-        var cookieAuthResult = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        if (cookieAuthResult.Succeeded && cookieAuthResult.Principal != null)
-        {
-            context.User = cookieAuthResult.Principal;
-            await _next(context);
-            return;
-        }
-
-        // Only query database if user is not authenticated via cookie
-        if (context.User?.Identity?.IsAuthenticated != true)
+        // Only query database if user is not authenticated
         {
             var sessionId = context.Request.Cookies[SessionIdCookieName];
             

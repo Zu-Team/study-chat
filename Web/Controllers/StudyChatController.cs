@@ -46,6 +46,7 @@ namespace Web.Controllers
             {
                 // Look up session in database
                 var session = await _dbContext.Sessions
+                    .AsNoTracking() // Read-only query
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
                 if (session == null)

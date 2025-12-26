@@ -301,6 +301,19 @@
                 this.style.height = (this.scrollHeight) + 'px';
             });
 
+            // Handle Enter key: Send message on Enter, new line on Shift+Enter
+            messageInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault(); // Prevent default new line
+                    // Trigger form submission
+                    const form = document.getElementById('messageForm');
+                    if (form) {
+                        form.dispatchEvent(new Event('submit'));
+                    }
+                }
+                // Shift+Enter will create a new line (default behavior)
+            });
+
             // Scroll to bottom on load
             if (messagesContainer) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;

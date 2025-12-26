@@ -59,7 +59,17 @@ if (string.IsNullOrWhiteSpace(connectionString) ||
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     // Use placeholder during build if connection string is not available (development only)
-    var connString = connectionString ?? "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
+    // If connection string is invalid, use a safe placeholder that won't cause exceptions
+    var connString = connectionString;
+    
+    // Check if connection string is valid before trying to use it
+    if (string.IsNullOrWhiteSpace(connString) || 
+        connString.Equals("REPLACE_ME", StringComparison.OrdinalIgnoreCase) ||
+        connString.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
+    {
+        // Use a safe placeholder that won't cause connection attempts
+        connString = "Host=localhost;Port=5432;Database=placeholder;Username=placeholder;Password=placeholder";
+    }
     
     // Optimize connection string for Azure/Supabase performance
     // Build optimized connection string with pooling parameters

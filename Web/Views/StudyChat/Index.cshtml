@@ -159,30 +159,38 @@
                         @foreach (var message in messages)
                         {
                             // Check if message is from the current user
-                            // userId is a string from claims/ViewBag, message.SenderId is a long?
-                            // Convert both to strings for comparison, or compare as numbers
+                            // Rules:
+                            // - sender_id = 1 → Always AI message (left side, assistant-message)
+                            // - sender_id = current user id → User message (right side, user-message)
+                            // - sender_id = null → AI message (left side, assistant-message)
+                            // - sender_id = any other id → AI message (left side, assistant-message)
                             var isUserMessage = false;
-                            if (message.SenderId.HasValue && !string.IsNullOrEmpty(userId))
+                            
+                            if (message.SenderId.HasValue)
                             {
-                                // Try to parse userId as long and compare, or compare as strings
-                                // Note: Must use explicit type 'long' instead of 'var' in Razor views
-                                long userIdLong;
-                                if (long.TryParse(userId, out userIdLong))
+                                // If sender_id is 1, it's always an AI message (AI Assistant user)
+                                if (message.SenderId.Value == 1)
                                 {
-                                    // message.SenderId.HasValue is already checked above, so .Value is safe
-                                    isUserMessage = message.SenderId!.Value == userIdLong;
+                                    isUserMessage = false; // AI message
                                 }
-                                else
+                                else if (!string.IsNullOrEmpty(userId))
                                 {
-                                    // Fallback to string comparison
-                                    // message.SenderId.HasValue is already checked above, so .Value is safe
-                                    isUserMessage = message.SenderId!.Value.ToString() == userId;
+                                    // Check if sender_id matches current user id
+                                    long userIdLong;
+                                    if (long.TryParse(userId, out userIdLong))
+                                    {
+                                        // Only messages with sender_id matching current user are user messages
+                                        isUserMessage = message.SenderId.Value == userIdLong;
+                                    }
+                                    else
+                                    {
+                                        // Fallback to string comparison
+                                        isUserMessage = message.SenderId.Value.ToString() == userId;
+                                    }
                                 }
+                                // If userId is null/empty, treat as AI message
                             }
-                            // IMPORTANT: If SenderId is 1 (AI user), it's always an AI message
-                            // If SenderId is null, it's also an AI message (assistant)
-                            // Only messages with SenderId matching current user are user messages
-                            // If SenderId doesn't match current user, it's an AI/assistant message
+                            // If SenderId is null, it's an AI message (assistant)
                             <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
                                 <div class="message-bubble">
                                     @Html.Raw(message.Content.Replace("\n", "<br/>"))

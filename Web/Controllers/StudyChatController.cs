@@ -646,6 +646,7 @@ namespace Web.Controllers
     {
         public string? Message { get; set; }
         public long? ChatId { get; set; }
+        public string? Type { get; set; } = "normal"; // "normal" or "quiz"
     }
 }
 

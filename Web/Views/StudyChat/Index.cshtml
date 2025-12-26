@@ -373,8 +373,141 @@
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
                     closeNewChatModal();
+                    closeCustomizeAIModal();
                 }
             });
+        });
+
+        // Customize AI Modal Functions
+        function showCustomizeAIModal() {
+            const modal = document.getElementById('customizeAIModal');
+            const textarea = document.getElementById('customizeAIText');
+            if (modal) {
+                modal.style.display = 'flex';
+                // Load existing customization
+                loadCustomizeAI();
+                if (textarea) {
+                    setTimeout(() => textarea.focus(), 100);
+                }
+            }
+        }
+
+        function closeCustomizeAIModal() {
+            const modal = document.getElementById('customizeAIModal');
+            const textarea = document.getElementById('customizeAIText');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+            if (textarea) {
+                textarea.value = '';
+                updateCharCount();
+            }
+        }
+
+        // Load customization from server
+        async function loadCustomizeAI() {
+            try {
+                const response = await fetch('/StudyChat/GetCustomizeAI', {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const textarea = document.getElementById('customizeAIText');
+                    if (textarea && data.text) {
+                        textarea.value = data.text;
+                        updateCharCount();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load customization:', error);
+            }
+        }
+
+        // Save customization to server
+        async function saveCustomizeAI() {
+            const textarea = document.getElementById('customizeAIText');
+            const saveButton = document.getElementById('btnSaveCustomizeAI');
+            
+            if (!textarea) return;
+            
+            const text = textarea.value.trim();
+            
+            // Disable save button
+            if (saveButton) {
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+            }
+            
+            try {
+                const response = await fetch('/StudyChat/SaveCustomizeAI', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ text: text })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        // Show success message (optional)
+                        alert('AI customization saved successfully!');
+                        closeCustomizeAIModal();
+                    } else {
+                        alert('Failed to save: ' + (data.error || 'Unknown error'));
+                    }
+                } else {
+                    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    alert('Failed to save: ' + (errorData.error || 'Server error'));
+                }
+            } catch (error) {
+                console.error('Failed to save customization:', error);
+                alert('Failed to save customization. Please try again.');
+            } finally {
+                // Re-enable save button
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.textContent = 'Save';
+                }
+            }
+        }
+
+        // Update character count
+        function updateCharCount() {
+            const textarea = document.getElementById('customizeAIText');
+            const charCount = document.getElementById('customizeAICharCount');
+            if (textarea && charCount) {
+                const count = textarea.value.length;
+                charCount.textContent = count;
+                if (count > 450) {
+                    charCount.style.color = '#ff6b6b';
+                } else if (count > 400) {
+                    charCount.style.color = '#f59e0b';
+                } else {
+                    charCount.style.color = '#888888';
+                }
+            }
+        }
+
+        // Add character count listener and modal close on outside click
+        document.addEventListener('DOMContentLoaded', function() {
+            const textarea = document.getElementById('customizeAIText');
+            if (textarea) {
+                textarea.addEventListener('input', updateCharCount);
+            }
+            
+            // Close customize modal when clicking outside
+            const customizeModal = document.getElementById('customizeAIModal');
+            if (customizeModal) {
+                customizeModal.addEventListener('click', function(e) {
+                    if (e.target === customizeModal) {
+                        closeCustomizeAIModal();
+                    }
+                });
+            }
         });
 
         // Auto-resize textarea

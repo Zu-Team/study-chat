@@ -271,18 +271,41 @@ namespace Web.Controllers
             {
                 try
                 {
+                    // SECURITY: Verify chat belongs to current user using session-based authorization
                     selectedChat = await _chatService.GetChatByIdAsync(chatId.Value, finalUserId);
-                    if (selectedChat != null)
+                    
+                    if (selectedChat == null)
                     {
-                        messages = await _chatService.GetMessagesAsync(chatId.Value);
-                        ViewBag.SelectedChat = selectedChat;
-                        ViewBag.ChatTitle = selectedChat.Name ?? "Untitled Chat";
+                        // Chat doesn't exist or doesn't belong to this user - unauthorized access attempt
+                        var traceId = HttpContext.TraceIdentifier;
+                        _logger.LogWarning("Unauthorized chat access attempt. UserId={UserId}, ChatId={ChatId}, TraceId={TraceId}", 
+                            finalUserId, chatId.Value, traceId);
+                        
+                        // Redirect to study page without chatId (shows user's own chats only)
+                        return RedirectToAction("Index", "StudyChat");
                     }
+                    
+                    // Additional security check: Verify chat.UserId matches current user
+                    if (selectedChat.UserId != finalUserId)
+                    {
+                        var traceId = HttpContext.TraceIdentifier;
+                        _logger.LogWarning("Chat ownership mismatch detected. ChatUserId={ChatUserId}, CurrentUserId={CurrentUserId}, ChatId={ChatId}, TraceId={TraceId}", 
+                            selectedChat.UserId, finalUserId, chatId.Value, traceId);
+                        
+                        // Redirect to study page without chatId (shows user's own chats only)
+                        return RedirectToAction("Index", "StudyChat");
+                    }
+                    
+                    // Chat belongs to user - load messages (with authorization check)
+                    messages = await _chatService.GetMessagesAsync(chatId.Value, finalUserId);
+                    ViewBag.SelectedChat = selectedChat;
+                    ViewBag.ChatTitle = selectedChat.Name ?? "Untitled Chat";
                 }
                 catch (Exception ex)
                 {
                     var traceId = HttpContext.TraceIdentifier;
-                    _logger.LogError(ex, "Failed to load selected chat/messages. TraceId={TraceId}, ChatId={ChatId}", traceId, chatId.Value);
+                    _logger.LogError(ex, "Failed to load selected chat/messages. TraceId={TraceId}, ChatId={ChatId}, UserId={UserId}", 
+                        traceId, chatId.Value, finalUserId);
                     ViewBag.ErrorMessage = $"We couldn't load this chat due to a server error. Ref: {traceId}";
                 }
             }
@@ -398,14 +421,22 @@ namespace Web.Controllers
                 Models.Chat chat;
                 if (request.ChatId.HasValue)
                 {
-                    // Verify chat belongs to user
+                    // SECURITY: Verify chat belongs to current user using session-based authorization
                     // userId.Value is safe here because we checked userId.HasValue above
                     chat = await _chatService.GetChatByIdAsync(request.ChatId.Value, userId!.Value);
                     if (chat == null)
                     {
-                        _logger.LogWarning("SendMessage: Chat {ChatId} not found or doesn't belong to user {UserId}. TraceId={TraceId}", 
+                        _logger.LogWarning("SendMessage: Unauthorized chat access attempt. ChatId={ChatId}, UserId={UserId}, TraceId={TraceId}", 
                             request.ChatId.Value, userId.Value, traceId);
-                        return NotFound(new { error = "Chat not found", traceId });
+                        return Unauthorized(new { error = "Chat not found or you don't have access to it", traceId });
+                    }
+                    
+                    // Additional security check: Verify chat.UserId matches current user
+                    if (chat.UserId != userId.Value)
+                    {
+                        _logger.LogWarning("SendMessage: Chat ownership mismatch. ChatUserId={ChatUserId}, CurrentUserId={CurrentUserId}, ChatId={ChatId}, TraceId={TraceId}", 
+                            chat.UserId, userId.Value, request.ChatId.Value, traceId);
+                        return Unauthorized(new { error = "You don't have access to this chat", traceId });
                     }
                 }
                 else

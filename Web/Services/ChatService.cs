@@ -39,8 +39,21 @@ public class ChatService
         return chat;
     }
 
-    public async Task<List<Message>> GetMessagesAsync(long chatId)
+    public async Task<List<Message>> GetMessagesAsync(long chatId, long userId)
     {
+        // SECURITY: Only return messages from chats that belong to the user
+        // First verify the chat exists and belongs to the user
+        var chat = await _context.Chats
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == chatId && c.UserId == userId);
+        
+        if (chat == null)
+        {
+            // Chat doesn't exist or doesn't belong to user - return empty list
+            return new List<Message>();
+        }
+        
+        // Chat belongs to user - return messages
         return await _context.Messages
             .AsNoTracking() // Read-only query - no change tracking needed
             .Include(m => m.Sender) // Include must come before OrderBy for better performance

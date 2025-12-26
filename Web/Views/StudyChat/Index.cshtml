@@ -165,14 +165,18 @@
                             if (message.SenderId.HasValue && !string.IsNullOrEmpty(userId))
                             {
                                 // Try to parse userId as long and compare, or compare as strings
-                                if (long.TryParse(userId, out var userIdLong))
+                                // Note: Must use explicit type 'long' instead of 'var' in Razor views
+                                long userIdLong;
+                                if (long.TryParse(userId, out userIdLong))
                                 {
-                                    isUserMessage = message.SenderId.Value == userIdLong;
+                                    // message.SenderId.HasValue is already checked above, so .Value is safe
+                                    isUserMessage = message.SenderId!.Value == userIdLong;
                                 }
                                 else
                                 {
                                     // Fallback to string comparison
-                                    isUserMessage = message.SenderId.Value.ToString() == userId;
+                                    // message.SenderId.HasValue is already checked above, so .Value is safe
+                                    isUserMessage = message.SenderId!.Value.ToString() == userId;
                                 }
                             }
                             // IMPORTANT: If SenderId is 1 (AI user), it's always an AI message

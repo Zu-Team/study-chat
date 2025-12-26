@@ -399,7 +399,8 @@ namespace Web.Controllers
                 if (request.ChatId.HasValue)
                 {
                     // Verify chat belongs to user
-                    chat = await _chatService.GetChatByIdAsync(request.ChatId.Value, userId.Value);
+                    // userId.Value is safe here because we checked userId.HasValue above
+                    chat = await _chatService.GetChatByIdAsync(request.ChatId.Value, userId!.Value);
                     if (chat == null)
                     {
                         _logger.LogWarning("SendMessage: Chat {ChatId} not found or doesn't belong to user {UserId}. TraceId={TraceId}", 

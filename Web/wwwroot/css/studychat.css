@@ -502,6 +502,110 @@
 }
 
 /* ============================================
+   TOAST NOTIFICATION
+   ============================================ */
+
+.toast-notification {
+    position: fixed;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    min-width: 300px;
+    max-width: 500px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toast-notification.toast-show {
+    top: 20px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast-notification.toast-success {
+    border-left: 4px solid #10b981;
+}
+
+.toast-notification.toast-error {
+    border-left: 4px solid #ef4444;
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.toast-icon {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toast-success .toast-icon {
+    color: #10b981;
+}
+
+.toast-error .toast-icon {
+    color: #ef4444;
+}
+
+.toast-error .toast-icon svg {
+    /* Error icon (X) */
+    path: d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0M5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z";
+}
+
+.toast-message {
+    flex: 1;
+    color: #e0e0e0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* Toast animation keyframes */
+@keyframes toastSlideIn {
+    from {
+        top: -100px;
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        top: 20px;
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes toastSlideOut {
+    from {
+        top: 20px;
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    to {
+        top: -100px;
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+}
+
+/* ============================================
    RESPONSIVE DESIGN
    ============================================ */
 

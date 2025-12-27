@@ -702,6 +702,15 @@
     outline-offset: 2px;
 }
 
+/* Override global focus-visible for message input - NO borders or outlines */
+.message-input:focus-visible,
+.input-wrapper:focus-visible,
+.input-wrapper *:focus-visible {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
 /* Ensure proper contrast for text */
 .message-bubble {
     color: #e0e0e0;

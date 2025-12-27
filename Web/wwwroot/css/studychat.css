@@ -365,6 +365,12 @@
 
 .message-input:focus {
     outline: none;
+    box-shadow: none;
+}
+
+.message-input:focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 /* Custom scrollbar for textarea */
@@ -685,7 +691,6 @@
    ACCESSIBILITY
    ============================================ */
 
-.message-input:focus-visible,
 .send-button:focus-visible,
 .btn-new-chat:focus-visible,
 .chat-item:focus-visible {

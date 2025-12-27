@@ -150,6 +150,8 @@
                 @if (hasSelectedChat && ViewBag.Messages != null)
                 {
                     var messages = (List<Web.Models.Message>)ViewBag.Messages;
+                    var selectedChat = ViewBag.SelectedChat as Web.Models.Chat;
+                    var currentChatId = selectedChat?.Id;
                     // Get userId from ViewBag (set by controller) or from claims as fallback
                     var userId = ViewBag.UserId != null ? ViewBag.UserId.ToString() : User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                     // Also try studychat_user_id claim
@@ -206,6 +208,12 @@
                                     @Html.Raw(message.Content.Replace("\n", "<br/>"))
                                 </div>
                             </div>
+                        }
+                        
+                        <!-- Quiz Container (will be populated by JavaScript) -->
+                        @if (currentChatId.HasValue)
+                        {
+                            <div id="quizContainer" data-chat-id="@currentChatId.Value" style="display: none;"></div>
                         }
                     }
                 }
@@ -783,6 +791,276 @@
             
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Quiz functionality
+        let currentQuiz = null;
+        let quizAnswers = {}; // Store user answers: { q1: 'A', q2: 'B', ... }
+        let quizSubmitted = false;
+
+        // Load quiz when page loads
+        document.addEventListener('DOMContentLoaded', async function() {
+            const quizContainer = document.getElementById('quizContainer');
+            if (quizContainer) {
+                const chatId = quizContainer.getAttribute('data-chat-id');
+                if (chatId) {
+                    await loadQuiz(parseInt(chatId));
+                }
+            }
+        });
+
+        // Load quiz data from server
+        async function loadQuiz(chatId) {
+            try {
+                const response = await fetch(`/StudyChat/GetQuiz?chatId=${chatId}`, {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.quiz && data.quiz.quiz_json) {
+                        currentQuiz = data.quiz;
+                        renderQuiz(data.quiz.quiz_json);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load quiz:', error);
+            }
+        }
+
+        // Render quiz UI
+        function renderQuiz(quizJson) {
+            const quizContainer = document.getElementById('quizContainer');
+            if (!quizContainer) return;
+
+            // Convert quiz_json object to array (q1, q2, q3, q4, q5)
+            const questions = Object.entries(quizJson)
+                .filter(([key]) => key.startsWith('q') && /^q\d+$/.test(key))
+                .sort(([keyA], [keyB]) => {
+                    const numA = parseInt(keyA.substring(1));
+                    const numB = parseInt(keyB.substring(1));
+                    return numA - numB;
+                })
+                .map(([key, value]) => ({ key, ...value }));
+
+            if (questions.length === 0) {
+                return; // No questions found
+            }
+
+            // Reset state
+            quizAnswers = {};
+            quizSubmitted = false;
+
+            // Create quiz HTML
+            let quizHTML = `
+                <div class="quiz-wrapper">
+                    <div class="quiz-header">
+                        <h3 class="quiz-title">📝 Quiz Mode</h3>
+                        <div class="quiz-progress">
+                            <span id="quizProgress">0</span>/${questions.length} questions answered
+                        </div>
+                    </div>
+                    <div class="quiz-questions" id="quizQuestions">
+            `;
+
+            // Render each question
+            questions.forEach((q, index) => {
+                const questionNum = index + 1;
+                quizHTML += `
+                    <div class="quiz-question" data-question-key="${q.key}">
+                        <div class="question-header">
+                            <span class="question-number">Question ${questionNum}</span>
+                        </div>
+                        <div class="question-text">${escapeHtml(q.question || '')}</div>
+                        <div class="question-options">
+                            <label class="option-label" data-option="A">
+                                <input type="radio" name="${q.key}" value="A" class="option-radio">
+                                <span class="option-text">A. ${escapeHtml(q.A || '')}</span>
+                            </label>
+                            <label class="option-label" data-option="B">
+                                <input type="radio" name="${q.key}" value="B" class="option-radio">
+                                <span class="option-text">B. ${escapeHtml(q.B || '')}</span>
+                            </label>
+                            <label class="option-label" data-option="C">
+                                <input type="radio" name="${q.key}" value="C" class="option-radio">
+                                <span class="option-text">C. ${escapeHtml(q.C || '')}</span>
+                            </label>
+                            <label class="option-label" data-option="D">
+                                <input type="radio" name="${q.key}" value="D" class="option-radio">
+                                <span class="option-text">D. ${escapeHtml(q.D || '')}</span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            });
+
+            quizHTML += `
+                    </div>
+                    <div class="quiz-actions">
+                        <button type="button" class="quiz-submit-btn" id="quizSubmitBtn" onclick="submitQuiz()">
+                            Submit Quiz
+                        </button>
+                    </div>
+                    <div class="quiz-results" id="quizResults" style="display: none;"></div>
+                </div>
+            `;
+
+            quizContainer.innerHTML = quizHTML;
+            quizContainer.style.display = 'block';
+
+            // Add event listeners for radio buttons
+            const radioButtons = quizContainer.querySelectorAll('.option-radio');
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const questionKey = this.name;
+                    quizAnswers[questionKey] = this.value;
+                    updateQuizProgress();
+                });
+            });
+
+            // Scroll to quiz
+            quizContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Update quiz progress
+        function updateQuizProgress() {
+            const progressElement = document.getElementById('quizProgress');
+            if (progressElement) {
+                const answeredCount = Object.keys(quizAnswers).length;
+                progressElement.textContent = answeredCount;
+            }
+        }
+
+        // Submit quiz and grade
+        function submitQuiz() {
+            if (quizSubmitted) return;
+
+            const quizContainer = document.getElementById('quizContainer');
+            if (!quizContainer || !currentQuiz || !currentQuiz.quiz_json) return;
+
+            const questions = Object.entries(currentQuiz.quiz_json)
+                .filter(([key]) => key.startsWith('q') && /^q\d+$/.test(key))
+                .sort(([keyA], [keyB]) => {
+                    const numA = parseInt(keyA.substring(1));
+                    const numB = parseInt(keyB.substring(1));
+                    return numA - numB;
+                })
+                .map(([key, value]) => ({ key, ...value }));
+
+            let correctCount = 0;
+            const results = [];
+
+            // Grade each question
+            questions.forEach((q, index) => {
+                const userAnswer = quizAnswers[q.key] || null;
+                const correctAnswer = q.code || null;
+                const isCorrect = userAnswer === correctAnswer;
+                
+                if (isCorrect) correctCount++;
+                
+                results.push({
+                    key: q.key,
+                    question: q.question,
+                    userAnswer: userAnswer,
+                    correctAnswer: correctAnswer,
+                    isCorrect: isCorrect,
+                    options: {
+                        A: q.A,
+                        B: q.B,
+                        C: q.C,
+                        D: q.D
+                    }
+                });
+            });
+
+            // Display results
+            displayQuizResults(results, correctCount, questions.length);
+
+            quizSubmitted = true;
+            
+            // Disable submit button
+            const submitBtn = document.getElementById('quizSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Quiz Submitted';
+            }
+        }
+
+        // Display quiz results
+        function displayQuizResults(results, correctCount, totalQuestions) {
+            const resultsContainer = document.getElementById('quizResults');
+            if (!resultsContainer) return;
+
+            const scorePercentage = Math.round((correctCount / totalQuestions) * 100);
+            
+            let resultsHTML = `
+                <div class="quiz-results-header">
+                    <h3>Quiz Results</h3>
+                    <div class="quiz-score">
+                        <span class="score-value">${correctCount}/${totalQuestions}</span>
+                        <span class="score-percentage">(${scorePercentage}%)</span>
+                    </div>
+                </div>
+                <div class="quiz-results-questions">
+            `;
+
+            results.forEach((result, index) => {
+                const questionNum = index + 1;
+                resultsHTML += `
+                    <div class="result-question ${result.isCorrect ? 'correct' : 'incorrect'}">
+                        <div class="result-question-header">
+                            <span class="result-question-number">Question ${questionNum}</span>
+                            <span class="result-status">${result.isCorrect ? '✓ Correct' : '✗ Incorrect'}</span>
+                        </div>
+                        <div class="result-question-text">${escapeHtml(result.question)}</div>
+                        <div class="result-options">
+                `;
+
+                // Show all options with highlighting
+                ['A', 'B', 'C', 'D'].forEach(option => {
+                    const isUserAnswer = result.userAnswer === option;
+                    const isCorrectAnswer = result.correctAnswer === option;
+                    let optionClass = '';
+                    
+                    if (isCorrectAnswer) {
+                        optionClass = 'correct-answer';
+                    } else if (isUserAnswer && !result.isCorrect) {
+                        optionClass = 'wrong-answer';
+                    }
+
+                    resultsHTML += `
+                        <div class="result-option ${optionClass}">
+                            <span class="result-option-label">${option}.</span>
+                            <span class="result-option-text">${escapeHtml(result.options[option])}</span>
+                            ${isCorrectAnswer ? '<span class="result-badge correct-badge">Correct Answer</span>' : ''}
+                            ${isUserAnswer && !result.isCorrect ? '<span class="result-badge wrong-badge">Your Answer</span>' : ''}
+                        </div>
+                    `;
+                });
+
+                resultsHTML += `
+                        </div>
+                    </div>
+                `;
+            });
+
+            resultsHTML += `
+                </div>
+            `;
+
+            resultsContainer.innerHTML = resultsHTML;
+            resultsContainer.style.display = 'block';
+
+            // Scroll to results
+            resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 }

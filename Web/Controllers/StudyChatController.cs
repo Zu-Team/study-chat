@@ -796,6 +796,81 @@ namespace Web.Controllers
             }
         }
 
+        // GET: /StudyChat/GetQuiz?chatId={id}
+        [HttpGet]
+        public async Task<IActionResult> GetQuiz(long? chatId)
+        {
+            var traceId = HttpContext.TraceIdentifier;
+            
+            try
+            {
+                if (!chatId.HasValue)
+                {
+                    return BadRequest(new { error = "chatId is required", traceId });
+                }
+
+                var userId = await ResolveUserIdAsync();
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("GetQuiz: User not authenticated. TraceId={TraceId}", traceId);
+                    return Unauthorized(new { error = "User not authenticated", traceId });
+                }
+
+                // SECURITY: Verify chat belongs to user
+                var chat = await _chatService.GetChatByIdAsync(chatId.Value, userId.Value);
+                if (chat == null)
+                {
+                    _logger.LogWarning("GetQuiz: Unauthorized chat access attempt. ChatId={ChatId}, UserId={UserId}, TraceId={TraceId}", 
+                        chatId.Value, userId.Value, traceId);
+                    return Unauthorized(new { error = "Chat not found or you don't have access to it", traceId });
+                }
+
+                // Load quiz for this chat
+                var quiz = await _dbContext.ChatQuizzes
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(q => q.ChatId == chatId.Value);
+
+                if (quiz == null)
+                {
+                    return Ok(new { quiz = (object?)null, traceId });
+                }
+
+                // Parse quiz_json and return it
+                try
+                {
+                    var quizData = quiz.QuizData;
+                    if (quizData == null)
+                    {
+                        return Ok(new { quiz = (object?)null, traceId });
+                    }
+
+                    // Return quiz data in the expected format
+                    return Ok(new 
+                    { 
+                        quiz = new
+                        {
+                            id = quiz.Id,
+                            chat_id = quiz.ChatId,
+                            quiz_json = JsonSerializer.Deserialize<object>(quiz.QuizJson),
+                            created_at = quiz.CreatedAt
+                        },
+                        traceId 
+                    });
+                }
+                catch (JsonException jsonEx)
+                {
+                    _logger.LogError(jsonEx, "GetQuiz: Failed to parse quiz JSON. QuizId={QuizId}, TraceId={TraceId}", quiz.Id, traceId);
+                    return StatusCode(500, new { error = "Failed to parse quiz data", traceId });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetQuiz: Unhandled exception. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}", 
+                    traceId, ex.GetType().Name, ex.Message);
+                return StatusCode(500, new { error = $"An unexpected server error occurred: {ex.Message}", traceId });
+            }
+        }
+
         // POST: /StudyChat/SaveCustomizeAI
         [HttpPost]
         [IgnoreAntiforgeryToken]

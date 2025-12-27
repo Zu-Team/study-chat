@@ -333,13 +333,10 @@
     border: none;
     border-radius: 24px;
     padding: 0.5rem 0.75rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .input-wrapper:focus-within {
-    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.15), 0 4px 12px rgba(74, 158, 255, 0.2);
-    background-color: #252525;
+    background-color: #1e1e1e;
 }
 
 .message-input {

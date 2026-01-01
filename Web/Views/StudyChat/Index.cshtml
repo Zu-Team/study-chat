@@ -203,7 +203,7 @@
                                 // If userId is null/empty, treat as AI message
                             }
                             // If SenderId is null, it's an AI message (assistant)
-                            <div class="message @(isUserMessage ? "user-message" : "assistant-message")">
+                            <div class="message @(isUserMessage ? "user-message" : "assistant-message")" data-message-id="@message.Id">
                                 <div class="message-bubble">
                                     @Html.Raw(message.Content.Replace("\n", "<br/>"))
                                 </div>
@@ -236,7 +236,16 @@
                             var selectedChat = ViewBag.SelectedChat as Web.Models.Chat;
                             var currentChatId = selectedChat?.Id;
                         }
-                        <input type="hidden" id="currentChatId" value="@currentChatId" />
+                        @{
+                            var selectedChatForInput = ViewBag.SelectedChat as Web.Models.Chat;
+                            var currentChatIdForInput = selectedChatForInput?.Id;
+                            var userIdForInput = ViewBag.UserId != null ? ViewBag.UserId.ToString() : User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                            if (string.IsNullOrEmpty(userIdForInput))
+                            {
+                                userIdForInput = User.FindFirst("studychat_user_id")?.Value;
+                            }
+                        }
+                        <input type="hidden" id="currentChatId" value="@currentChatIdForInput" data-user-id="@userIdForInput" />
                         <div class="input-wrapper">
                             <textarea 
                                 class="message-input" 
@@ -654,8 +663,11 @@
                 const chatIdInput = document.getElementById('currentChatId');
                 const currentChatId = chatIdInput ? (chatIdInput.value ? parseInt(chatIdInput.value) : null) : null;
 
-                // Add user message to chat immediately (will be replaced when page reloads)
+                // Add user message to chat immediately (will be replaced when polling gets the real message)
                 addMessageToChat(input, true);
+                // Track this message content to avoid duplicates when polling
+                const messageKey = input.trim().substring(0, 50);
+                recentlyAddedMessages.set(messageKey, Date.now());
 
                 // Clear input
                     messageInput.value = '';
@@ -686,31 +698,31 @@
                     // Debug logging
                     console.log('Response data:', data);
                     
-                    // Add AI response to chat (will be replaced when page reloads)
+                    // Add AI response to chat immediately (will be replaced when polling gets the real message)
                     if (data.success && data.aiMessage) {
                         addMessageToChat(data.aiMessage, false);
+                        // Track this message content to avoid duplicates when polling
+                        const aiMessageKey = data.aiMessage.trim().substring(0, 50);
+                        recentlyAddedMessages.set(aiMessageKey, Date.now());
                         
                         // Log debug info if available
                         if (data.debug) {
                             console.log('Debug info:', data.debug);
                         }
                         
-                        // Reload page to show all messages from database
-                        // This ensures we see the saved user message and any AI message saved by the webhook
-                        if (data.chatId) {
-                            // Update the chatId in the hidden input if it was created
-                            if (chatIdInput && !currentChatId) {
-                                chatIdInput.value = data.chatId;
-                            }
-                            // Reload after a short delay to allow the AI message to be saved
+                        // Update chatId if it was created
+                        const finalChatId = data.chatId || currentChatId;
+                        if (chatIdInput && !currentChatId && data.chatId) {
+                            chatIdInput.value = data.chatId;
+                        }
+                        
+                        // Poll for new messages from the server instead of reloading
+                        // The webhook may save additional messages, so we check for updates
+                        if (finalChatId) {
+                            // Start polling for new messages after a short delay
                             setTimeout(() => {
-                                window.location.href = '/StudyChat?chatId=' + data.chatId;
-                            }, 500);
-                        } else if (currentChatId) {
-                            // Reload current chat
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 500);
+                                pollForNewMessages(finalChatId, 3); // Poll up to 3 times
+                            }, 1000);
                         }
                     } else {
                         // Log error details
@@ -765,13 +777,16 @@
         }
 
         // Function to add message to chat UI
-        function addMessageToChat(message, isUser) {
+        function addMessageToChat(message, isUser, messageId = null) {
             const messagesContainer = document.getElementById('messagesContainer');
             if (!messagesContainer) return;
 
             // Create message element
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+            if (messageId) {
+                messageDiv.setAttribute('data-message-id', messageId);
+            }
             
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
@@ -791,6 +806,97 @@
             
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Track message IDs to avoid duplicates
+        const displayedMessageIds = new Set();
+        // Track recently added messages by content (to avoid duplicates before server assigns ID)
+        const recentlyAddedMessages = new Map(); // content -> timestamp
+        
+        // Initialize displayed message IDs from existing messages on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const existingMessages = document.querySelectorAll('#messagesContainer .message');
+            existingMessages.forEach(msg => {
+                const msgId = msg.getAttribute('data-message-id');
+                if (msgId) {
+                    displayedMessageIds.add(parseInt(msgId));
+                }
+            });
+            
+            // Clean up old entries from recentlyAddedMessages (older than 10 seconds)
+            setInterval(() => {
+                const now = Date.now();
+                for (const [content, timestamp] of recentlyAddedMessages.entries()) {
+                    if (now - timestamp > 10000) {
+                        recentlyAddedMessages.delete(content);
+                    }
+                }
+            }, 5000);
+        });
+
+        // Function to poll for new messages from the server
+        async function pollForNewMessages(chatId, maxAttempts = 3) {
+            if (!chatId || maxAttempts <= 0) return;
+            
+            try {
+                const response = await fetch(`/StudyChat/GetMessages?chatId=${chatId}`, {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                });
+
+                if (!response.ok) {
+                    console.warn('Failed to fetch messages:', response.status);
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.messages || !Array.isArray(data.messages)) {
+                    return;
+                }
+
+                // Get current user ID from the page (stored in a data attribute or variable)
+                const chatIdInput = document.getElementById('currentChatId');
+                const userId = chatIdInput ? chatIdInput.getAttribute('data-user-id') : null;
+
+                // Add any new messages that aren't already displayed
+                let hasNewMessages = false;
+                data.messages.forEach(msg => {
+                    // Skip if we've already displayed this message ID
+                    if (displayedMessageIds.has(msg.id)) {
+                        return;
+                    }
+                    
+                    // Check if this message content was recently added (to avoid duplicates)
+                    const messageKey = msg.content.trim().substring(0, 50); // Use first 50 chars as key
+                    const recentlyAdded = recentlyAddedMessages.get(messageKey);
+                    if (recentlyAdded && (Date.now() - recentlyAdded < 5000)) {
+                        // This message was recently added, skip it to avoid duplicate
+                        displayedMessageIds.add(msg.id); // Mark as displayed so we don't check again
+                        return;
+                    }
+                    
+                    // New message - add it
+                    displayedMessageIds.add(msg.id);
+                    
+                    // Determine if message is from user or AI
+                    // sender_id = 1 → AI message
+                    // sender_id = current user id → User message
+                    const isUser = msg.senderId && msg.senderId !== 1 && userId && 
+                                  (msg.senderId.toString() === userId || msg.senderId === parseInt(userId));
+                    
+                    addMessageToChat(msg.content, isUser, msg.id);
+                    hasNewMessages = true;
+                });
+
+                // If we got new messages and haven't exhausted attempts, poll again
+                if (hasNewMessages && maxAttempts > 1) {
+                    setTimeout(() => {
+                        pollForNewMessages(chatId, maxAttempts - 1);
+                    }, 2000); // Poll again after 2 seconds
+                }
+            } catch (error) {
+                console.error('Error polling for messages:', error);
+            }
         }
 
         // Quiz functionality

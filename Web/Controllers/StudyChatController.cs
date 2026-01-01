@@ -797,6 +797,58 @@ namespace Web.Controllers
         }
 
         // GET: /StudyChat/GetQuiz?chatId={id}
+        // GET: /StudyChat/GetMessages?chatId={id}
+        [HttpGet]
+        public async Task<IActionResult> GetMessages(long? chatId)
+        {
+            var traceId = HttpContext.TraceIdentifier;
+            
+            try
+            {
+                if (!chatId.HasValue)
+                {
+                    return BadRequest(new { error = "chatId is required", traceId });
+                }
+
+                var userId = await ResolveUserIdAsync();
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("GetMessages: User not authenticated. TraceId={TraceId}", traceId);
+                    return Unauthorized(new { error = "User not authenticated", traceId });
+                }
+
+                // SECURITY: Verify chat belongs to user
+                var chat = await _chatService.GetChatByIdAsync(chatId.Value, userId.Value);
+                if (chat == null)
+                {
+                    _logger.LogWarning("GetMessages: Unauthorized chat access attempt. ChatId={ChatId}, UserId={UserId}, TraceId={TraceId}", 
+                        chatId.Value, userId.Value, traceId);
+                    return Unauthorized(new { error = "Chat not found or you don't have access to it", traceId });
+                }
+
+                // Get messages for this chat
+                var messages = await _chatService.GetMessagesAsync(chatId.Value, userId.Value);
+
+                // Return messages in a format suitable for frontend
+                var messageList = messages.Select(m => new
+                {
+                    id = m.Id,
+                    chatId = m.ChatId,
+                    senderId = m.SenderId,
+                    content = m.Content,
+                    createdAt = m.CreatedAt
+                }).ToList();
+
+                return Ok(new { messages = messageList, traceId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetMessages: Unhandled exception. TraceId={TraceId}, ExceptionType={ExceptionType}, Message={Message}", 
+                    traceId, ex.GetType().Name, ex.Message);
+                return StatusCode(500, new { error = $"An unexpected server error occurred: {ex.Message}", traceId });
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetQuiz(long? chatId)
         {

@@ -439,6 +439,17 @@
             const textarea = document.getElementById('customizeAIText');
             if (modal) {
                 modal.style.display = 'flex';
+                // Close sidebar on mobile when opening customize AI modal
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.chat-sidebar');
+                    const sidebarOverlay = document.getElementById('sidebarOverlay');
+                    if (sidebar) {
+                        sidebar.classList.remove('open');
+                    }
+                    if (sidebarOverlay) {
+                        sidebarOverlay.classList.remove('active');
+                    }
+                }
                 // Load existing customization
                 loadCustomizeAI();
                 if (textarea) {

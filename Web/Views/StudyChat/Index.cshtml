@@ -123,6 +123,16 @@
 
     <!-- Main Chat Area -->
     <main class="chat-main">
+        <!-- Mobile Menu Toggle Button -->
+        <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle sidebar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5"/>
+            </svg>
+        </button>
+        
+        <!-- Mobile Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        
         @{
             var chats = ViewBag.Chats as List<Web.Models.Chat> ?? new List<Web.Models.Chat>();
             var hasChats = chats.Count > 0;
@@ -135,7 +145,7 @@
             <div class="no-chats-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 2rem; text-align: center;">
                 <div style="font-size: 4rem; margin-bottom: 1rem;">📚</div>
                 <h2 style="color: #ffffff; margin-bottom: 0.5rem; font-size: 1.5rem;">Create a chat to start studying</h2>
-                <p style="color: #888888; margin-bottom: 2rem;">Click "New Chat" to begin your learning journey</p>
+                <p style="color: #888888; margin-bottom: 2rem;">Click "New Chat" in the sidebar to begin your learning journey</p>
             </div>
         }
         else
@@ -618,6 +628,41 @@
             }
         }
 
+        // Mobile menu toggle
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const sidebar = document.querySelector('.chat-sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        
+        function toggleSidebar() {
+            if (sidebar) {
+                sidebar.classList.toggle('open');
+            }
+            if (sidebarOverlay) {
+                sidebarOverlay.classList.toggle('active');
+            }
+        }
+        
+        if (mobileMenuToggle) {
+            mobileMenuToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', toggleSidebar);
+        }
+        
+        // Close sidebar when clicking on a chat item (mobile)
+        const chatItems = document.querySelectorAll('.chat-item');
+        chatItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // Only close on mobile
+                if (window.innerWidth <= 768) {
+                    setTimeout(() => {
+                        toggleSidebar();
+                    }, 300); // Small delay for navigation
+                }
+            });
+        });
+        
         // Quiz mode state
         let quizModeActive = false;
         const quizButton = document.getElementById('quizButton');

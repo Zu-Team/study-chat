@@ -152,6 +152,11 @@
         {
             <!-- Chat Header -->
             <header class="chat-header">
+                <button class="mobile-menu-toggle mobile-header-toggle" id="mobileHeaderToggle" aria-label="Toggle sidebar" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5"/>
+                    </svg>
+                </button>
                 <h3 class="chat-title">@(ViewBag.ChatTitle ?? "Study Chat")</h3>
             </header>
 
@@ -630,6 +635,7 @@
 
         // Mobile menu toggle
         const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const mobileHeaderToggle = document.getElementById('mobileHeaderToggle');
         const sidebar = document.querySelector('.chat-sidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         
@@ -644,6 +650,10 @@
         
         if (mobileMenuToggle) {
             mobileMenuToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        if (mobileHeaderToggle) {
+            mobileHeaderToggle.addEventListener('click', toggleSidebar);
         }
         
         if (sidebarOverlay) {

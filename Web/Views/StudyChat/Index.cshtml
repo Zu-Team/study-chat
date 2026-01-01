@@ -299,7 +299,7 @@
     </div>
     
     <!-- Customize AI Modal -->
-    <div id="customizeAIModal" class="customize-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="customizeAIModal" class="customize-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1002; align-items: center; justify-content: center;">
         <div style="background: #1a1a1a; border-radius: 12px; padding: 2rem; min-width: 500px; max-width: 90%; max-height: 90vh; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column;">
             <h2 style="color: #ffffff; margin-bottom: 1.5rem; font-size: 1.5rem;">Customize AI</h2>
             <div style="margin-bottom: 1.5rem; flex: 1; display: flex; flex-direction: column; min-height: 200px;">
@@ -326,7 +326,7 @@
     </div>
     
     <!-- New Chat Modal -->
-    <div id="newChatModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="newChatModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1002; align-items: center; justify-content: center;">
         <div style="background: #1a1a1a; border-radius: 12px; padding: 2rem; min-width: 400px; max-width: 90%; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);">
             <h2 style="color: #ffffff; margin-bottom: 1.5rem; font-size: 1.5rem;">Create New Chat</h2>
             <form asp-action="NewChat" asp-controller="StudyChat" method="post" id="newChatForm">
@@ -385,6 +385,17 @@
             const input = document.getElementById('chatName');
             if (modal) {
                 modal.style.display = 'flex';
+                // Close sidebar on mobile when opening new chat modal
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.chat-sidebar');
+                    const sidebarOverlay = document.getElementById('sidebarOverlay');
+                    if (sidebar) {
+                        sidebar.classList.remove('open');
+                    }
+                    if (sidebarOverlay) {
+                        sidebarOverlay.classList.remove('active');
+                    }
+                }
                 if (input) {
                     setTimeout(() => input.focus(), 100);
                 }
